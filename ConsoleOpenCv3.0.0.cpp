@@ -8,7 +8,6 @@
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	int keyCode = VK_ESCAPE;
 	std::cout << "Hello, world!\n";
 
 	cv::VideoCapture cap(0); // open the default camera
@@ -45,7 +44,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		imshow("Camera edges", edges);
 		imshow("Camera clear image", frame);
 
-		if (cv::waitKey(keyCode) >= 0) 
+		if (cv::waitKey(27) >= 0) 
 		{
 			break;
 		}
