@@ -13,3 +13,9 @@
 
 
 // TODO: reference additional headers your program requires here
+#include <stdlib.h>
+#include <vector>
+#include <math.h>
+#include <algorithm>
+#include <time.h>
+#include <ctime>
