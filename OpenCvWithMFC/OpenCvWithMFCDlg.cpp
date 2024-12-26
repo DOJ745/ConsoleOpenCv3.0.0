@@ -92,11 +92,16 @@ volatile bool stopThread = false; // Флаг для остановки потока
 void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 {
 	if (img.empty())
+	{
 		return;
+	}
 
-	CWnd* pPictureCtrl = pWnd->GetDlgItem(IDC_PICTURE_CONTROL); // Получаем Picture Control
+	CWnd* pPictureCtrl = pWnd->GetDlgItem(IDC_PICTURE_CONTROL);
+
 	if (!pPictureCtrl)
+	{
 		return;
+	}
 
 	// Получаем размеры Picture Control
 	CRect rect;
@@ -104,6 +109,7 @@ void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 
 	// Преобразуем изображение в формат BGR24 (если требуется)
 	cv::Mat bgrImage;
+
 	if (img.channels() == 1)
 	{
 		cv::cvtColor(img, bgrImage, cv::COLOR_GRAY2BGR);
@@ -143,11 +149,13 @@ void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 // Потоковая функция для захвата кадров
 UINT CameraCaptureThread(LPVOID pParam)
 {
-	CWnd* pWnd = (CWnd*)pParam;
+	COpenCvWithMFCDlg* dlg = (COpenCvWithMFCDlg*)pParam;
+	CWnd* pWnd = dlg;
 
 	while (!stopThread)
 	{
 		cap >> frame;
+
 		if (frame.empty())
 		{
 			continue;
@@ -155,13 +163,8 @@ UINT CameraCaptureThread(LPVOID pParam)
 
 		// Обработка изображения
 		cv::cvtColor(frame, edges, cv::COLOR_BGR2GRAY);
-		cv::GaussianBlur(edges, edges, cv::Size(7, 7), 1.5, 1.5);
-		cv::Canny(edges, edges, 50, 90);
-
-		// Обновляем Picture Control в главном потоке
-		//pWnd->PostMessage(WM_USER + 1);
-
-		//Sleep(25); // Задержка для уменьшения нагрузки на CPU
+		cv::GaussianBlur(edges, edges, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
+		cv::Canny(edges, edges, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
 
 		DrawFrameToPictureControl(pWnd, edges);
 	}
@@ -205,6 +208,10 @@ END_MESSAGE_MAP()
 
 COpenCvWithMFCDlg::COpenCvWithMFCDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(COpenCvWithMFCDlg::IDD, pParent)
+	, m_CannyThreshold1(50)
+	, m_CannyThreshold2(90)
+	, m_KernelSize1(7)
+	, m_KernelSize2(7)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -212,6 +219,14 @@ COpenCvWithMFCDlg::COpenCvWithMFCDlg(CWnd* pParent /*=NULL*/)
 void COpenCvWithMFCDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Text(pDX, IDC_EDIT_CANNY_THRESHOLD_1, m_CannyThreshold1);
+	DDV_MinMaxInt(pDX, m_CannyThreshold1, 0, 200);
+	DDX_Text(pDX, IDC_EDIT_CANNY_THRESHOLD_2, m_CannyThreshold2);
+	DDV_MinMaxInt(pDX, m_CannyThreshold2, 0, 200);
+	DDX_Text(pDX, IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1, m_KernelSize1);
+	DDV_MinMaxInt(pDX, m_KernelSize1, 1, 101);
+	DDX_Text(pDX, IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, m_KernelSize2);
+	DDV_MinMaxInt(pDX, m_KernelSize2, 1, 101);
 }
 
 BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
@@ -222,6 +237,10 @@ BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_STOP, &COpenCvWithMFCDlg::OnBnClickedButtonStop)
 	ON_WM_TIMER()
 	ON_MESSAGE(WM_USER + 1, &COpenCvWithMFCDlg::OnUpdatePicture)
+	ON_EN_UPDATE(IDC_EDIT_CANNY_THRESHOLD_1, &COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold1)
+	ON_EN_UPDATE(IDC_EDIT_CANNY_THRESHOLD_2, &COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold2)
+	ON_EN_UPDATE(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1, &COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize1)
+	ON_EN_UPDATE(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, &COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2)
 END_MESSAGE_MAP()
 
 
@@ -257,6 +276,10 @@ BOOL COpenCvWithMFCDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	SetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_1, m_CannyThreshold1);
+	SetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_2, m_CannyThreshold2);
+	SetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1, m_KernelSize1);
+	SetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, m_KernelSize2);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -385,4 +408,31 @@ afx_msg LRESULT COpenCvWithMFCDlg::OnUpdatePicture(WPARAM wParam, LPARAM lParam)
 	//DisplayImageInPictureControl(this, edges);
 	//DrawFrameToPictureControl(pWnd, edges);
 	return 0;
+}
+
+void COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold1()
+{
+	m_CannyThreshold1 = GetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_1);
+	UpdateData(FALSE);
+}
+
+
+void COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold2()
+{
+	m_CannyThreshold2 = GetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_2);
+	UpdateData(FALSE);
+}
+
+
+void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize1()
+{
+	m_KernelSize1 = (GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1) % 2 != 0) ? GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1) : 1;
+	UpdateData(FALSE);
+}
+
+
+void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2()
+{
+	m_KernelSize2 = (GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) % 2 != 0) ? GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) : 1;
+	UpdateData(FALSE);
 }
