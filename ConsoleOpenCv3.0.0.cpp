@@ -2,15 +2,12 @@
 //
 
 #include "stdafx.h"
-#include <iostream>
-#include <Windows.h>
 #include "opencv2/opencv.hpp"
-#include "opencv2/features2d.hpp"
-#include <opencv2/flann.hpp>
+#include <opencv2/highgui.hpp>
 #include "GetCpuTime.h"
 
-IplImage* image = 0;
-IplImage* templ = 0;
+//IplImage* image = 0;
+//IplImage* templ = 0;
 
 //// ===== Image detection =====
 //int _tmain(int argc, _TCHAR* argv[])
@@ -128,9 +125,10 @@ int main()
 {
 	setlocale(LC_ALL, "Russian");
 	// Загрузка изображений
-	int imgReadMode = cv::IMREAD_UNCHANGED; // IMREAD_COLOR by default
+	int imgReadMode = cv::IMREAD_COLOR; // IMREAD_COLOR by default
 	cv::Mat image = cv::imread("OriginalImage.jpg", imgReadMode);
 	cv::Mat templateImage = cv::imread("EyeImage.jpg", imgReadMode);
+	cv::Mat pngImage = cv::imread("test.png", cv::IMREAD_GRAYSCALE);
 
 	if (image.empty()) 
 	{
@@ -144,33 +142,43 @@ int main()
 		return -1;
 	}
 
+	if (pngImage.empty())
+	{
+		std::cerr << "Ошибка загрузки png изображения" << std::endl;
+		return -1;
+	}
+
 	// Конвертация в градации серого
-	cv::Mat grayImage, grayTemplate;
+	cv::Mat grayImage; 
+	cv::Mat grayTemplate;
 
-	cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+	cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY, 1);
+	cv::imshow("COLOR_BGR2GRAY grayImage", grayImage);
 
-	if (grayImage.empty())
+	if (grayImage.empty() || grayImage.type() != CV_8UC1)
 	{
-		std::cerr << "Ошибка: grayImage пустое" << std::endl;
+		std::cerr << "Ошибка: grayImage пустое!\n";
 		return -1;
 	}
 
-	cv::cvtColor(templateImage, grayTemplate, cv::COLOR_BGR2GRAY);
-
-	if (grayTemplate.empty()) 
+	if (grayImage.type() != CV_8UC1)
 	{
-		std::cerr << "Ошибка: grayTemplate пустое" << std::endl;
+		std::cerr << "Ошибка: grayImage имеет неверный формат!\n";
 		return -1;
 	}
 
-	const int keyPoints = 250;
+	cv::cvtColor(templateImage, grayTemplate, cv::COLOR_BGR2GRAY, 1);
+	cv::imshow("COLOR_BGR2GRAY grayTemplate", grayTemplate);
 
-	// Создание объекта ORB
-	cv::Ptr<cv::ORB> orb = cv::ORB::create(keyPoints);
-
-	if (orb.empty()) 
+	if (grayTemplate.empty())
 	{
-		std::cerr << "Ошибка: объект ORB не создан" << std::endl;
+		std::cerr << "Ошибка: grayTemplate пустое!\n";
+		return -1;
+	}
+
+	if (grayTemplate.type() != CV_8UC1)
+	{
+		std::cerr << "Ошибка: grayTemplate имеет неверный формат!\n";
 		return -1;
 	}
 
@@ -184,36 +192,35 @@ int main()
 
 	
 	// Обнаружение ключевых точек и вычисление дескрипторов
-	std::vector<cv::KeyPoint> keypointsImage, keypointsTemplate;
-	cv::Mat descriptorsImage, descriptorsTemplate;
+	std::vector<cv::KeyPoint> keypointsImage;
+	std::vector<cv::KeyPoint> keypointsTemplate;
+
+	cv::Mat emptyMask;
+	cv::Mat descriptorsImage;
+	cv::Mat descriptorsTemplate;
 
 	cv::normalize(grayImage, grayImage, 0, 255, cv::NORM_MINMAX);
 	cv::normalize(grayTemplate, grayTemplate, 0, 255, cv::NORM_MINMAX);
 
-	//orb->detectAndCompute(grayImage, cv::Mat(), keypointsImage, descriptorsImage);
-	//orb->detectAndCompute(grayTemplate, cv::Mat(), keypointsTemplate, descriptorsTemplate);
+	cv::imshow("NORMALIZED grayImage", grayImage);
+	cv::imshow("NORMALIZED grayTemplate", grayTemplate);
+
+	//cv::Ptr<cv::ORB> orb = cv::ORB::create();
+	//orb->detectAndCompute(pngImage, cv::noArray(), keypointsImage, descriptorsImage);
 
 	// Замер времени выполнения для getCPUTime() 
 	double startTime, endTime;
 
 	startTime = getCPUTime();
-	std::clock_t start = std::clock();
-	akaze->detectAndCompute(grayImage, cv::Mat(), keypointsImage, descriptorsImage);
-	std::clock_t end = std::clock();
+	akaze->detectAndCompute(grayImage, emptyMask, keypointsImage, descriptorsImage);
 	endTime = getCPUTime();
 
-	double elapsed_secs = double(end - start) / CLOCKS_PER_SEC;
-	std::cout << "Время на akaze grayImage (по std::clock()): " << elapsed_secs << " сек.\n";
 	std::cout << "Время на akaze grayImage (по getCPUTime): " << endTime - startTime << " сек.\n";
 
 	startTime = getCPUTime();
-	start = std::clock();
-	akaze->detectAndCompute(grayTemplate, cv::Mat(), keypointsTemplate, descriptorsTemplate);
-	end = std::clock();
+	akaze->detectAndCompute(grayTemplate, emptyMask, keypointsTemplate, descriptorsTemplate);
 	endTime = getCPUTime();
 
-	elapsed_secs = double(end - start) / CLOCKS_PER_SEC;
-	std::cout << "Время на akaze grayTemplate (по std::clock()): " << elapsed_secs << " сек.\n";
 	std::cout << "Время на akaze grayTemplate (по getCPUTime): " << endTime - startTime << " сек.\n";
 
 	if (keypointsImage.empty() || keypointsTemplate.empty()) 

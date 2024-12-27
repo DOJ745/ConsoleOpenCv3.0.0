@@ -13,6 +13,8 @@
 
 
 // TODO: reference additional headers your program requires here
+#include <Windows.h>
+#include <iostream>
 #include <stdlib.h>
 #include <vector>
 #include <math.h>

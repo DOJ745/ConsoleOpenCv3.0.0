@@ -55,8 +55,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\opencv3.0.0\opencv\build\x86\vc11\lib;D:\opencv3.0.0\opencv_3.0.0_vs2010_x86\lib\Debug;D:\opencv3.0.0\opencv\build\x86\vc11\staticlib;D:\opencv3.0.0\opencv\build\x86\vc12\lib;D:\opencv3.0.0\opencv\build\x86\vc12\staticlib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opencv_ts300d.lib;opencv_world300d.lib;opencv_videostab300d.lib;opencv_videoio300d.lib;opencv_video300d.lib;opencv_superres300d.lib;opencv_stitching300d.lib;opencv_shape300d.lib;opencv_photo300d.lib;opencv_objdetect300d.lib;opencv_ml300d.lib;opencv_imgproc300d.lib;opencv_imgcodecs300d.lib;opencv_highgui300d.lib;opencv_hal300d.lib;opencv_flann300d.lib;opencv_features2d300d.lib;opencv_core300d.lib;opencv_calib3d300d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>D:\opencv3.0.0\opencv\build\x86\vc12\lib;D:\opencv3.0.0\opencv\build\x86\vc12\staticlib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_ts300d.lib;opencv_world300d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
