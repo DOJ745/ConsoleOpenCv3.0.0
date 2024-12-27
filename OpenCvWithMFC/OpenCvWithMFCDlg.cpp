@@ -22,73 +22,6 @@ UINT_PTR TIMER_ID = 1;
 UINT TIMER_INTERVAL_MS = 1;
 volatile bool stopThread = false; // Флаг для остановки потока
 
-/*HBITMAP MatToHBITMAP(const cv::Mat& mat)
-{
-	// Проверяем, что изображение действительно существует
-	if (mat.empty()) 
-	{
-		return nullptr;
-	}
-
-	// Преобразуем изображение в формат с 3 каналами (BGR)
-	cv::Mat temp;
-
-	if (mat.channels() == 1)
-	{
-		cv::cvtColor(mat, temp, cv::COLOR_GRAY2BGR);
-	}
-	else
-	{
-		temp = mat.clone();
-	}
-
-	// Создаем Bitmap-объект
-	BITMAPINFO bInfo;
-	memset(&bInfo, 0, sizeof(BITMAPINFO));
-	bInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-	bInfo.bmiHeader.biWidth = temp.cols;
-	bInfo.bmiHeader.biHeight = -temp.rows;		// Отрицательная высота для переворота изображения
-	bInfo.bmiHeader.biPlanes = 1;
-	bInfo.bmiHeader.biBitCount = 24;			// 24 бита на пиксель
-	bInfo.bmiHeader.biCompression = BI_RGB;
-
-	void* data = nullptr;
-	HBITMAP hBitmap = CreateDIBSection(nullptr, &bInfo, DIB_RGB_COLORS, &data, nullptr, 0);
-
-	if (!hBitmap)
-	{
-		return nullptr;
-	}
-
-	// Копируем пиксели
-	memcpy(data, temp.data, temp.total() * temp.elemSize());
-	return hBitmap;
-} */
-
-// Отображение изображения в Picture Control
-/*void DisplayImageInPictureControl(CWnd* pWnd, const cv::Mat& mat)
-{
-	// Получаем HBITMAP
-	HBITMAP hBitmap = MatToHBITMAP(mat);
-
-	if (!hBitmap)
-	{
-		return;
-	}
-
-	// Получаем указатель на Picture Control
-	CStatic* pPictureControl = (CStatic*)pWnd->GetDlgItem(IDC_PICTURE_CONTROL);
-
-	if (pPictureControl)
-	{
-		// Устанавливаем изображение
-		pPictureControl->SetBitmap(hBitmap);
-
-		// Удаляем предыдущее изображение
-		DeleteObject(hBitmap);
-	}
-}*/
-
 void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 {
 	if (img.empty())
@@ -119,29 +52,27 @@ void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 		bgrImage = img;
 	}
 
-	// Получаем HDC для Picture Control
+	// Получаем контекст устройства (Picture Control)
 	HDC hdc = ::GetDC(pPictureCtrl->m_hWnd);
 
-	// Настраиваем BITMAPINFO
 	BITMAPINFO bInfo;
 	memset(&bInfo, 0, sizeof(BITMAPINFO));
 	bInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
 	bInfo.bmiHeader.biWidth = bgrImage.cols;
-	bInfo.bmiHeader.biHeight = -bgrImage.rows; // Отрицательная высота для переворота
-	bInfo.bmiHeader.biPlanes = 1;
-	bInfo.bmiHeader.biBitCount = 24;           // 24 бита на пиксель
+	bInfo.bmiHeader.biHeight = -bgrImage.rows; // Используется отрицательная высота, чтобы изображение не переворачивалось вверх ногами
+	bInfo.bmiHeader.biPlanes = 1;			   // Количество цветовых плоскостей
+	bInfo.bmiHeader.biBitCount = 24;           // 24 бита на пиксель (3 байта на пиксель, BGR)
 	bInfo.bmiHeader.biCompression = BI_RGB;    // Без компрессии
 
-	// Отрисовка в контексте устройства
 	::SetDIBitsToDevice(
 		hdc,
 		0, 0,                               // Координаты верхнего левого угла
-		rect.Width(), rect.Height(),        // Размеры изображения
-		0, 0,                               // Начальные координаты
-		0, bgrImage.rows,                   // Линии для вывода
-		bgrImage.data,                      // Данные изображения
-		&bInfo,
-		DIB_RGB_COLORS);
+		rect.Width(), rect.Height(),        // Размеры области отрисовки
+		0, 0,                               // Начальные координаты данных изображения
+		0, bgrImage.rows,                   // Число строк данных изображения
+		bgrImage.data,                      // Указатель на массив пикселей
+		&bInfo,                             // Информация о формате изображения
+		DIB_RGB_COLORS);                    // Интерпретация цветов (RGB)
 
 	::ReleaseDC(pPictureCtrl->m_hWnd, hdc); // Освобождаем HDC
 }
@@ -166,7 +97,19 @@ UINT CameraCaptureThread(LPVOID pParam)
 		cv::GaussianBlur(edges, edges, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
 		cv::Canny(edges, edges, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
 
-		DrawFrameToPictureControl(pWnd, edges);
+		// Рисование перекрестья
+		int centerX = frame.cols / 2;
+		int centerY = frame.rows / 2;
+		cv::Scalar crossColor(0, 0, 255); // Цвет перекрестья: красный (BGR)
+		int thickness = 2;
+
+		// Горизонтальная линия
+		cv::line(frame, cv::Point(0, centerY), cv::Point(frame.cols, centerY), crossColor, thickness);
+
+		// Вертикальная линия
+		cv::line(frame, cv::Point(centerX, 0), cv::Point(centerX, frame.rows), crossColor, thickness);
+
+		DrawFrameToPictureControl(pWnd, frame);
 	}
 
 	return 0;
@@ -276,6 +219,7 @@ BOOL COpenCvWithMFCDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+
 	SetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_1, m_CannyThreshold1);
 	SetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_2, m_CannyThreshold2);
 	SetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1, m_KernelSize1);
@@ -335,22 +279,6 @@ HCURSOR COpenCvWithMFCDlg::OnQueryDragIcon()
 
 void COpenCvWithMFCDlg::OnBnClickedButtonStart()
 {
-	/*if (!cap.isOpened())
-	{
-		cap.open(0);
-	}
-
-	if (!cap.isOpened())
-	{
-		MessageBox(_T("Не удалось открыть камеру!"));
-		return;
-	}
-
-	cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
-	cap.set(cv::CAP_PROP_FRAME_HEIGHT, 960);
-
-	SetTimer(TIMER_ID, TIMER_INTERVAL_MS, nullptr);*/
-
 	if (!cap.isOpened())
 	{
 		cap.open(0);
@@ -362,8 +290,27 @@ void COpenCvWithMFCDlg::OnBnClickedButtonStart()
 		return;
 	}
 
-	cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
-	cap.set(cv::CAP_PROP_FRAME_HEIGHT, 960);
+	cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+	cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+
+	int frameWidth = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+	int frameHeight = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+
+	// Получение PictureControl
+	CWnd* pWnd = GetDlgItem(IDC_PICTURE_CONTROL); // Замените IDC_PICTURE_CONTROL на ID вашего PictureControl
+
+	if (pWnd)
+	{
+		// Изменение размеров PictureControl
+		CRect rect;
+		pWnd->GetWindowRect(&rect);
+		ScreenToClient(&rect); // Преобразование координат в клиентские
+
+		// Установка новых размеров
+		rect.right = rect.left + frameWidth;
+		rect.bottom = rect.top + frameHeight;
+		pWnd->MoveWindow(&rect);
+	}
 
 	stopThread = false;
 	AfxBeginThread(CameraCaptureThread, this); // Запускаем поток
@@ -382,31 +329,11 @@ void COpenCvWithMFCDlg::OnBnClickedButtonStop()
 
 void COpenCvWithMFCDlg::OnTimer(UINT_PTR nIDEvent)
 {
-	/*if (nIDEvent == TIMER_ID)
-	{
-		cap >> frame;
 
-		if (frame.empty())
-		{
-			KillTimer(TIMER_ID);
-			MessageBox(_T("Камера отключена или кадры не доступны!"));
-			return;
-		}
-
-		cv::cvtColor(frame, edges, cv::COLOR_BGR2GRAY);
-		cv::GaussianBlur(edges, edges, cv::Size(7, 7), 1.5, 1.5);
-		cv::Canny(edges, edges, 50, 90);
-
-		DisplayImageInPictureControl(this, edges);
-	}
-
-	CDialogEx::OnTimer(nIDEvent);*/
 }
 
 afx_msg LRESULT COpenCvWithMFCDlg::OnUpdatePicture(WPARAM wParam, LPARAM lParam)
 {
-	//DisplayImageInPictureControl(this, edges);
-	//DrawFrameToPictureControl(pWnd, edges);
 	return 0;
 }
 
