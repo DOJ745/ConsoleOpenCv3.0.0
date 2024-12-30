@@ -15,9 +15,10 @@
 #endif
 
 cv::VideoCapture cap; // Глобальный объект захвата камеры
-cv::Mat frame;
-cv::Mat edges;
+cv::Mat FRAME;
+cv::Mat EDGES;
 
+const char* COMPARE_IMG = "compare.jpg";
 UINT_PTR TIMER_ID = 1;
 UINT TIMER_INTERVAL_MS = 1;
 volatile bool stopThread = false; // Флаг для остановки потока
@@ -85,31 +86,31 @@ UINT CameraCaptureThread(LPVOID pParam)
 
 	while (!stopThread)
 	{
-		cap >> frame;
+		cap >> FRAME;
 
-		if (frame.empty())
+		if (FRAME.empty())
 		{
 			continue;
 		}
 
 		// Обработка изображения
-		cv::cvtColor(frame, edges, cv::COLOR_BGR2GRAY);
-		cv::GaussianBlur(edges, edges, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
-		cv::Canny(edges, edges, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
+		cv::cvtColor(FRAME, EDGES, cv::COLOR_BGR2GRAY);
+		cv::GaussianBlur(EDGES, EDGES, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
+		cv::Canny(EDGES, EDGES, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
 
 		// Рисование перекрестья
-		int centerX = frame.cols / 2;
-		int centerY = frame.rows / 2;
+		int centerX = FRAME.cols / 2;
+		int centerY = FRAME.rows / 2;
 		cv::Scalar crossColor(0, 0, 255); // Цвет перекрестья: красный (BGR)
 		int thickness = 2;
 
 		// Горизонтальная линия
-		cv::line(frame, cv::Point(0, centerY), cv::Point(frame.cols, centerY), crossColor, thickness);
+		cv::line(FRAME, cv::Point(25, centerY), cv::Point(FRAME.cols - 25, centerY), crossColor, thickness);
 
 		// Вертикальная линия
-		cv::line(frame, cv::Point(centerX, 0), cv::Point(centerX, frame.rows), crossColor, thickness);
+		cv::line(FRAME, cv::Point(centerX, 25), cv::Point(centerX, FRAME.rows - 25), crossColor, thickness);
 
-		DrawFrameToPictureControl(pWnd, frame);
+		DrawFrameToPictureControl(pWnd, FRAME);
 	}
 
 	return 0;
@@ -184,6 +185,8 @@ BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
 	ON_EN_UPDATE(IDC_EDIT_CANNY_THRESHOLD_2, &COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold2)
 	ON_EN_UPDATE(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1, &COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize1)
 	ON_EN_UPDATE(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, &COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2)
+	ON_BN_CLICKED(IDC_BUTTON_SAVE_PICTURE, &COpenCvWithMFCDlg::OnBnClickedButtonSavePicture)
+	ON_BN_CLICKED(IDC_BUTTON_COMPARE_FRAME, &COpenCvWithMFCDlg::OnBnClickedButtonCompareFrame)
 END_MESSAGE_MAP()
 
 
@@ -290,9 +293,18 @@ void COpenCvWithMFCDlg::OnBnClickedButtonStart()
 		return;
 	}
 
-	cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-	cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+	if (!cap.set(cv::CAP_PROP_FRAME_WIDTH, 640) || cap.get(cv::CAP_PROP_FRAME_WIDTH) != 640)
+	{
+		MessageBox(_T("Не удалось задать ширину кадра камеры!"));
+		return;
+	}
 
+	if (!cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480) || cap.get(cv::CAP_PROP_FRAME_HEIGHT) != 480)
+	{
+		MessageBox(_T("Не удалось задать высоту кадра камеры!"));
+		return;
+	}
+	
 	int frameWidth = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
 	int frameHeight = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
 
@@ -362,4 +374,19 @@ void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2()
 {
 	m_KernelSize2 = (GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) % 2 != 0) ? GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) : 1;
 	UpdateData(FALSE);
+}
+
+
+void COpenCvWithMFCDlg::OnBnClickedButtonSavePicture()
+{
+	if(cv::imwrite(COMPARE_IMG, FRAME))
+	{
+		MessageBox(_T("Изображение сохранено!"), _T("Сохранение"));
+	}
+}
+
+
+void COpenCvWithMFCDlg::OnBnClickedButtonCompareFrame()
+{
+	// TODO: Add your control notification handler code here
 }

@@ -47,4 +47,6 @@ public:
 	afx_msg void OnEnUpdateEditCannyThreshold2();
 	afx_msg void OnEnUpdateEditGaussianKernelSize1();
 	afx_msg void OnEnUpdateEditGaussianKernelSize2();
+	afx_msg void OnBnClickedButtonSavePicture();
+	afx_msg void OnBnClickedButtonCompareFrame();
 };
