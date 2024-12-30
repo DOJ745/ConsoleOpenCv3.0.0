@@ -124,11 +124,12 @@
 int main()
 {
 	setlocale(LC_ALL, "Russian");
+
 	// Загрузка изображений
-	int imgReadMode = cv::IMREAD_COLOR; // IMREAD_COLOR by default
+	int imgReadMode = cv::IMREAD_GRAYSCALE; // IMREAD_COLOR by default
 	cv::Mat image = cv::imread("OriginalImage.jpg", imgReadMode);
 	cv::Mat templateImage = cv::imread("EyeImage.jpg", imgReadMode);
-	cv::Mat pngImage = cv::imread("test.png", cv::IMREAD_GRAYSCALE);
+	cv::Mat pngImage = cv::imread("test2.png", imgReadMode);
 
 	if (image.empty()) 
 	{
@@ -148,40 +149,6 @@ int main()
 		return -1;
 	}
 
-	// Конвертация в градации серого
-	cv::Mat grayImage; 
-	cv::Mat grayTemplate;
-
-	cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY, 1);
-	cv::imshow("COLOR_BGR2GRAY grayImage", grayImage);
-
-	if (grayImage.empty() || grayImage.type() != CV_8UC1)
-	{
-		std::cerr << "Ошибка: grayImage пустое!\n";
-		return -1;
-	}
-
-	if (grayImage.type() != CV_8UC1)
-	{
-		std::cerr << "Ошибка: grayImage имеет неверный формат!\n";
-		return -1;
-	}
-
-	cv::cvtColor(templateImage, grayTemplate, cv::COLOR_BGR2GRAY, 1);
-	cv::imshow("COLOR_BGR2GRAY grayTemplate", grayTemplate);
-
-	if (grayTemplate.empty())
-	{
-		std::cerr << "Ошибка: grayTemplate пустое!\n";
-		return -1;
-	}
-
-	if (grayTemplate.type() != CV_8UC1)
-	{
-		std::cerr << "Ошибка: grayTemplate имеет неверный формат!\n";
-		return -1;
-	}
-
 	cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
 
 	if (akaze.empty())
@@ -190,38 +157,68 @@ int main()
 		return -1;
 	}
 
+	cv::Ptr<cv::ORB> orb = cv::ORB::create(
+		2500,					// Максимальное количество ключевых точек
+		1.4f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
+		6,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше вычислений требуется)
+		100,					// Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
+		0,						// Первый уровень пирамиды
+		2,						// WTA_K
+		cv::ORB::FAST_SCORE,	// Метод оценки
+		64,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
+		20						// Порог отклика
+	);
+
+	if (orb.empty())
+	{
+		std::cerr << "Ошибка: объект ORB не создан" << std::endl;
+		return -1;
+	}
 	
 	// Обнаружение ключевых точек и вычисление дескрипторов
-	std::vector<cv::KeyPoint> keypointsImage;
-	std::vector<cv::KeyPoint> keypointsTemplate;
+	std::vector<cv::KeyPoint> keypointsImage, keypointsTemplate;
+	std::vector<cv::KeyPoint> keypointsImageOrb, keypointsTemplateOrb;
 
 	cv::Mat emptyMask;
-	cv::Mat descriptorsImage;
-	cv::Mat descriptorsTemplate;
+	cv::Mat descriptorsImage, descriptorsTemplate;
+	cv::Mat descriptorsImageOrb, descriptorsTemplateOrb;
 
-	cv::normalize(grayImage, grayImage, 0, 255, cv::NORM_MINMAX);
-	cv::normalize(grayTemplate, grayTemplate, 0, 255, cv::NORM_MINMAX);
+	double minVal, maxVal;
 
-	cv::imshow("NORMALIZED grayImage", grayImage);
-	cv::imshow("NORMALIZED grayTemplate", grayTemplate);
+	if (image.channels() == 3) 
+	{
+		cv::cvtColor(image, image, cv::COLOR_BGR2GRAY);
+	}
+	else
+	{
+		cv::minMaxLoc(image, &minVal, &maxVal);
+		std::cout << "Диапазон значений image: [" << minVal << ", " << maxVal << "]\n";
+	}
 
-	//cv::Ptr<cv::ORB> orb = cv::ORB::create();
-	//orb->detectAndCompute(pngImage, cv::noArray(), keypointsImage, descriptorsImage);
+	if (templateImage.channels() == 3)
+	{
+		cv::cvtColor(templateImage, templateImage, cv::COLOR_BGR2GRAY);
+	}
+	else
+	{
+		cv::minMaxLoc(templateImage, &minVal, &maxVal);
+		std::cout << "Диапазон значений templateImage: [" << minVal << ", " << maxVal << "]\n";
+	}
 
 	// Замер времени выполнения для getCPUTime() 
 	double startTime, endTime;
 
 	startTime = getCPUTime();
-	akaze->detectAndCompute(grayImage, emptyMask, keypointsImage, descriptorsImage);
+	akaze->detectAndCompute(image, emptyMask, keypointsImage, descriptorsImage);
 	endTime = getCPUTime();
 
-	std::cout << "Время на akaze grayImage (по getCPUTime): " << endTime - startTime << " сек.\n";
+	std::cout << "Время на AKAZE image (по getCPUTime): " << endTime - startTime << " сек.\n";
 
 	startTime = getCPUTime();
-	akaze->detectAndCompute(grayTemplate, emptyMask, keypointsTemplate, descriptorsTemplate);
+	akaze->detectAndCompute(templateImage, emptyMask, keypointsTemplate, descriptorsTemplate);
 	endTime = getCPUTime();
 
-	std::cout << "Время на akaze grayTemplate (по getCPUTime): " << endTime - startTime << " сек.\n";
+	std::cout << "Время на AKAZE templateImage (по getCPUTime): " << endTime - startTime << " сек.\n";
 
 	if (keypointsImage.empty() || keypointsTemplate.empty()) 
 	{
@@ -235,10 +232,36 @@ int main()
 		return -1;
 	}
 
+	startTime = getCPUTime();
+	orb->detectAndCompute(image, emptyMask, keypointsImageOrb, descriptorsImageOrb);
+	endTime = getCPUTime();
+
+	std::cout << "Время на ORB image (по getCPUTime): " << endTime - startTime << " сек.\n";
+
+	startTime = getCPUTime();
+	orb->detectAndCompute(templateImage, emptyMask, keypointsTemplateOrb, descriptorsTemplateOrb);
+	endTime = getCPUTime();
+
+	std::cout << "Время на ORB templateImage (по getCPUTime): " << endTime - startTime << " сек.\n";
+
+	if (keypointsImageOrb.empty() || keypointsTemplateOrb.empty())
+	{
+		std::cerr << "Ошибка: недостаточно ключевых точек для сопоставления" << std::endl;
+		return -1;
+	}
+
+	if (descriptorsImageOrb.empty() || descriptorsTemplateOrb.empty())
+	{
+		std::cerr << "Ошибка: дескрипторы не созданы" << std::endl;
+		return -1;
+	}
+
 	// Сопоставление дескрипторов (Brute-Force)
 	cv::BFMatcher matcher(cv::NORM_HAMMING, true);
-	std::vector<cv::DMatch> matches;
+	std::vector<cv::DMatch> matches, matchesOrb;
+
 	matcher.match(descriptorsTemplate, descriptorsImage, matches);
+	matcher.match(descriptorsTemplateOrb, descriptorsImageOrb, matchesOrb);
 
 	// Сортировка совпадений по расстоянию
 	std::sort(
@@ -246,9 +269,14 @@ int main()
 		, matches.end()
 		, [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; } );
 
+	std::sort(
+		matchesOrb.begin()
+		, matchesOrb.end()
+		, [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; });
+
 	// Фильтрация совпадений
-	const double maxDistance = 50.0; // Порог расстояния для фильтрации
-	std::vector<cv::DMatch> goodMatches;
+	const double maxDistance = 30.0; // Порог расстояния для фильтрации (50.0)
+	std::vector<cv::DMatch> goodMatches, goodMatchesOrb;
 	
 	for (int i = 0; i < matches.size(); i++) 
 	{
@@ -258,16 +286,31 @@ int main()
 		}
 	}
 
+	for (int i = 0; i < matchesOrb.size(); i++)
+	{
+		if (matchesOrb[i].distance < maxDistance)
+		{
+			goodMatchesOrb.push_back(matchesOrb[i]);
+		}
+	}
+
 	// Рассчёт процента совпадения
 	double matchPercentage = (double)goodMatches.size() / keypointsTemplate.size() * 100.0;
-
-	std::cout << "Найдено совпадений: " << matches.size() << "\n";
-	std::cout << "Общее количество ключевых точек в шаблоне: " << keypointsTemplate.size() << "\n";
-	std::cout << "Количество хороших совпадений: " << goodMatches.size() << "\n";
-	std::cout << "Процент совпадения: " << matchPercentage << "%" << "\n";
+	double matchPercentageOrb = (double)goodMatchesOrb.size() / keypointsTemplateOrb.size() * 100.0;
+	std::cout << "\n======= AKAZE =======\n\n";
+	std::cout << "Найдено совпадений AKAZE: " << matches.size() << "\n";
+	std::cout << "Общее количество ключевых точек в шаблоне AKAZE: " << keypointsTemplate.size() << "\n";
+	std::cout << "Количество хороших совпадений AKAZE: " << goodMatches.size() << "\n";
+	std::cout << "Процент совпадения AKAZE: " << matchPercentage << "%" << "\n";
+	std::cout << "\n======= ORB =======\n\n";
+	std::cout << "Найдено совпадений ORB: " << matchesOrb.size() << "\n";
+	std::cout << "Общее количество ключевых точек в шаблоне ORB: " << keypointsTemplateOrb.size() << "\n";
+	std::cout << "Количество хороших совпадений ORB: " << goodMatchesOrb.size() << "\n";
+	std::cout << "Процент совпадения ORB: " << matchPercentageOrb << "%" << "\n";
 
 	// Визуализация совпадений
-	cv::Mat matchedImage;
+	cv::Mat matchedImage, matchedImageOrb;
+
 	cv::drawMatches(
 		templateImage
 		, keypointsTemplate
@@ -280,11 +323,22 @@ int main()
 		, std::vector<char>()
 		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
+	cv::drawMatches(
+		templateImage
+		, keypointsTemplateOrb
+		, image
+		, keypointsImageOrb
+		, goodMatchesOrb
+		, matchedImageOrb
+		, cv::Scalar::all(-1)
+		, cv::Scalar::all(-1)
+		, std::vector<char>()
+		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+
 	// Показ результата
-	cv::imshow("Matched Keypoints", matchedImage);
+	cv::imshow("Matched Keypoints AKAZE", matchedImage);
+	cv::imshow("Matched Keypoints ORB", matchedImageOrb);
 	cv::waitKey(0);
-	
-	cvDestroyAllWindows();
 
 	return 0;
 }

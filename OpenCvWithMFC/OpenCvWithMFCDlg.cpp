@@ -304,7 +304,7 @@ void COpenCvWithMFCDlg::OnBnClickedButtonStart()
 		// Изменение размеров PictureControl
 		CRect rect;
 		pWnd->GetWindowRect(&rect);
-		ScreenToClient(&rect); // Преобразование координат в клиентские
+		ScreenToClient(&rect);	// Преобразование координат в клиентские
 
 		// Установка новых размеров
 		rect.right = rect.left + frameWidth;
