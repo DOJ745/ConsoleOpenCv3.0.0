@@ -127,9 +127,19 @@ int main()
 
 	// Загрузка изображений
 	int imgReadMode = cv::IMREAD_GRAYSCALE; // IMREAD_COLOR by default
-	cv::Mat image = cv::imread("OriginalImage.jpg", imgReadMode);
-	cv::Mat templateImage = cv::imread("EyeImage.jpg", imgReadMode);
-	cv::Mat pngImage = cv::imread("test2.png", imgReadMode);
+
+	const char* originalImageFile = "images/HD-CHIP.jpg"; //;  "OriginalImage.jpg";
+	const char* templateImageFile = "images/HD-CHIP-SURFACE.jpg"; // "EyeImage.jpg";
+	const char* pngImageFile = "test2.png";
+
+	cv::Mat image = cv::imread(originalImageFile, imgReadMode);
+	cv::Mat templateImage = cv::imread(templateImageFile, imgReadMode);
+	cv::Mat pngImage = cv::imread(pngImageFile, imgReadMode);
+
+	double resizeCoeff = 0.15;
+
+	cv::resize(image, image, cv::Size(), resizeCoeff, resizeCoeff);
+	cv::resize(templateImage, templateImage, cv::Size(), resizeCoeff, resizeCoeff);
 
 	if (image.empty()) 
 	{
@@ -192,6 +202,7 @@ int main()
 	else
 	{
 		cv::minMaxLoc(image, &minVal, &maxVal);
+		cv::normalize(image, image, 0, 255, cv::NORM_MINMAX);
 		std::cout << "Диапазон значений image: [" << minVal << ", " << maxVal << "]\n";
 	}
 
@@ -202,6 +213,7 @@ int main()
 	else
 	{
 		cv::minMaxLoc(templateImage, &minVal, &maxVal);
+		cv::normalize(templateImage, templateImage, 0, 255, cv::NORM_MINMAX);
 		std::cout << "Диапазон значений templateImage: [" << minVal << ", " << maxVal << "]\n";
 	}
 
@@ -247,37 +259,37 @@ int main()
 	if (keypointsImageOrb.empty() || keypointsTemplateOrb.empty())
 	{
 		std::cerr << "Ошибка: недостаточно ключевых точек для сопоставления" << std::endl;
-		return -1;
+		//return -1;
 	}
 
 	if (descriptorsImageOrb.empty() || descriptorsTemplateOrb.empty())
 	{
 		std::cerr << "Ошибка: дескрипторы не созданы" << std::endl;
-		return -1;
+		//return -1;
 	}
 
 	// Сопоставление дескрипторов (Brute-Force)
 	cv::BFMatcher matcher(cv::NORM_HAMMING, true);
-	std::vector<cv::DMatch> matches, matchesOrb;
-
+	std::vector<cv::DMatch> matches;
 	matcher.match(descriptorsTemplate, descriptorsImage, matches);
-	matcher.match(descriptorsTemplateOrb, descriptorsImageOrb, matchesOrb);
-
+	
 	// Сортировка совпадений по расстоянию
 	std::sort(
 		matches.begin()
 		, matches.end()
 		, [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; } );
 
+	std::vector<cv::DMatch> matchesOrb;
+	matcher.match(descriptorsTemplateOrb, descriptorsImageOrb, matchesOrb);
 	std::sort(
 		matchesOrb.begin()
 		, matchesOrb.end()
 		, [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; });
 
 	// Фильтрация совпадений
-	const double maxDistance = 30.0; // Порог расстояния для фильтрации (50.0)
-	std::vector<cv::DMatch> goodMatches, goodMatchesOrb;
+	const double maxDistance = 50.0; // Порог расстояния для фильтрации (50.0)
 	
+	std::vector<cv::DMatch> goodMatches; 
 	for (int i = 0; i < matches.size(); i++) 
 	{
 		if (matches[i].distance < maxDistance)
@@ -286,6 +298,7 @@ int main()
 		}
 	}
 
+	std::vector<cv::DMatch> goodMatchesOrb;
 	for (int i = 0; i < matchesOrb.size(); i++)
 	{
 		if (matchesOrb[i].distance < maxDistance)
@@ -295,13 +308,15 @@ int main()
 	}
 
 	// Рассчёт процента совпадения
+
 	double matchPercentage = (double)goodMatches.size() / keypointsTemplate.size() * 100.0;
-	double matchPercentageOrb = (double)goodMatchesOrb.size() / keypointsTemplateOrb.size() * 100.0;
 	std::cout << "\n======= AKAZE =======\n\n";
 	std::cout << "Найдено совпадений AKAZE: " << matches.size() << "\n";
 	std::cout << "Общее количество ключевых точек в шаблоне AKAZE: " << keypointsTemplate.size() << "\n";
 	std::cout << "Количество хороших совпадений AKAZE: " << goodMatches.size() << "\n";
 	std::cout << "Процент совпадения AKAZE: " << matchPercentage << "%" << "\n";
+
+	double matchPercentageOrb = (double)goodMatchesOrb.size() / keypointsTemplateOrb.size() * 100.0;
 	std::cout << "\n======= ORB =======\n\n";
 	std::cout << "Найдено совпадений ORB: " << matchesOrb.size() << "\n";
 	std::cout << "Общее количество ключевых точек в шаблоне ORB: " << keypointsTemplateOrb.size() << "\n";
@@ -309,7 +324,7 @@ int main()
 	std::cout << "Процент совпадения ORB: " << matchPercentageOrb << "%" << "\n";
 
 	// Визуализация совпадений
-	cv::Mat matchedImage, matchedImageOrb;
+	cv::Mat matchedImage;
 
 	cv::drawMatches(
 		templateImage
@@ -323,6 +338,7 @@ int main()
 		, std::vector<char>()
 		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
+	cv::Mat matchedImageOrb;
 	cv::drawMatches(
 		templateImage
 		, keypointsTemplateOrb
@@ -436,4 +452,150 @@ int main()
 //	}
 //
 //	return 0;
+//}
+
+// // ===== MANUAL SET KEY POINTS =====
+// 
+//int main() 
+//{
+//    // Загрузка изображения
+//    cv::Mat image = cv::imread("images/HD-CHIP.jpg", cv::IMREAD_GRAYSCALE);
+//
+//    if (image.empty()) 
+//    {
+//        std::cerr << "Ошибка: не удалось загрузить изображение." << std::endl;
+//        return -1;
+//    }
+//
+//    // Создание уникальных ключевых точек вручную
+//    std::vector<cv::KeyPoint> keypoints;
+//    keypoints.push_back(cv::KeyPoint(100, 150, 10)); 
+//    keypoints.push_back(cv::KeyPoint(200, 250, 15));
+//    keypoints.push_back(cv::KeyPoint(300, 350, 20));
+//
+//    // Вычисление дескрипторов для заданных точек
+//    cv::Mat descriptors;
+//    cv::Ptr<cv::ORB> orb = cv::ORB::create();
+//    orb->compute(image, keypoints, descriptors);
+//
+//    // Визуализация ключевых точек
+//    cv::Mat outputImage;
+//    cv::drawKeypoints(image, keypoints, outputImage, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//    cv::imshow("Keypoints", outputImage);
+//    cv::waitKey(0);
+//
+//    return 0;
+//}
+
+//// Глобальные переменные для хранения изображения и выбранных точек
+//cv::Mat image, overallImage;
+//std::vector<cv::Point2f> selectedPoints;
+//
+//// Callback-функция для обработки событий мыши
+//void onMouse(int event, int x, int y, int, void*) 
+//{
+//    if (event == cv::EVENT_LBUTTONDOWN) 
+//    {
+//        // Добавляем выбранную точку в список
+//        selectedPoints.emplace_back(cv::Point2f(x, y));
+//        std::cout << "Выбрана точка: (" << x << ", " << y << ")\n";
+//
+//        // Рисуем точку на изображении для визуального подтверждения
+//        cv::circle(image, cv::Point(x, y), 5, cv::Scalar(0, 255, 0), -1);
+//        cv::imshow("Select Points", image);
+//    }
+//}
+//
+//int main() 
+//{
+//    setlocale(LC_ALL, "Russian");
+//    // Загружаем изображение
+//    image = cv::imread("images/HD-CHIP-SURFACE.jpg", cv::IMREAD_GRAYSCALE);
+//    overallImage = cv::imread("images/HD-CHIP.jpg", cv::IMREAD_GRAYSCALE);
+//    cv::resize(overallImage, overallImage, cv::Size(), 0.2, 0.2);
+//
+//    if (image.empty()) 
+//    {
+//        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
+//        return -1;
+//    }
+//
+//    // Показываем изображение
+//    cv::imshow("Select Points", image);
+//
+//    // Устанавливаем callback для обработки событий мыши
+//    cv::setMouseCallback("Select Points", onMouse);
+//
+//    // Ждём, пока пользователь нажмёт клавишу 'q' для завершения выбора
+//    std::cout << "Выберите точки на изображении. Нажмите 'q' для завершения.\n";
+//
+//    while (true) 
+//    {
+//        char key = cv::waitKey(1);
+//        
+//        if (key == 'q') 
+//        {
+//            break;
+//        }
+//    }
+//
+//    // Выводим список выбранных точек
+//    std::cout << "Выбранные точки:\n";
+//
+//    for (int i = 0; i < selectedPoints.size(); i++)
+//    {
+//        std::cout << "(" << selectedPoints[i].x << ", " << selectedPoints[i].y << ")\n";
+//    }
+//
+//    // Преобразуем выбранные точки в KeyPoint для дальнейшего использования
+//    std::vector<cv::KeyPoint> keypoints, keypointsOverallImage;
+//
+//    for (int i = 0; i < selectedPoints.size(); i++)
+//    {
+//        keypoints.emplace_back(cv::KeyPoint(selectedPoints[i].x, selectedPoints[i].y, 10)); // Указываем координаты и размер
+//    }
+//
+//    // Визуализация ключевых точек
+//    cv::Mat keypointsImage;
+//    cv::drawKeypoints(image, keypoints, keypointsImage, cv::Scalar(0, 0, 255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//    cv::imshow("Keypoints", keypointsImage);
+//
+//	cv::Mat result;
+//	cv::resize(image, image, cv::Size(), 0.2, 0.2);
+//	cv::matchTemplate(overallImage, image, result, cv::TM_CCOEFF_NORMED);
+//
+//	double minVal, maxVal;
+//	cv::Point minLoc, maxLoc;
+//	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+//
+//	std::cout << "Шаблонное совпадение (максимальная корреляция): " << maxVal << std::endl;
+//
+//    // Пороговое значение корреляции
+//	if (maxVal > 0.8) 
+//	{ 
+//		std::cout << "Совпадение подтверждено через шаблонное сравнение." << std::endl;
+//
+//        // Размер шаблона
+//        cv::Size templateSize = image.size();
+//
+//        // Рисуем красный прямоугольник на оригинальном изображении
+//        cv::rectangle(
+//            overallImage,
+//            maxLoc,                                                                     // Верхний левый угол совпадения
+//            cv::Point(maxLoc.x + templateSize.width, maxLoc.y + templateSize.height),   // Нижний правый угол
+//            cv::Scalar(0, 0, 255),                                                      // Цвет (BGR): красный
+//            2                                                                           // Толщина линии
+//        );
+//
+//        // Показываем результат
+//        cv::imshow("Detected Area", overallImage);
+//	}
+//	else 
+//	{
+//		std::cout << "Совпадение не подтверждено." << std::endl;
+//	}
+//
+//    cv::waitKey(0);
+//
+//    return 0;
 //}
