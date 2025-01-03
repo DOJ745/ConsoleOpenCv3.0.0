@@ -49,4 +49,10 @@ public:
 	afx_msg void OnEnUpdateEditGaussianKernelSize2();
 	afx_msg void OnBnClickedButtonSavePicture();
 	afx_msg void OnBnClickedButtonCompareFrame();
+	// Ширина кадра для масштабирования
+	int m_ResizeFrameWidth;
+	// Высота кадра для масштабирования
+	int m_ResizeFrameHeight;
+	afx_msg void OnEnUpdateEditResizeFrameWidth();
+	afx_msg void OnEnUpdateEditResizeFrameHeight();
 };

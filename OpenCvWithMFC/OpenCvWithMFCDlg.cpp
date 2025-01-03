@@ -14,7 +14,7 @@
 #define new DEBUG_NEW
 #endif
 
-cv::VideoCapture cap; // Глобальный объект захвата камеры
+cv::VideoCapture CAP; // Глобальный объект захвата камеры
 cv::Mat FRAME;
 cv::Mat EDGES;
 
@@ -83,34 +83,87 @@ UINT CameraCaptureThread(LPVOID pParam)
 {
 	COpenCvWithMFCDlg* dlg = (COpenCvWithMFCDlg*)pParam;
 	CWnd* pWnd = dlg;
+	cv::Mat resizedFrame;
+	bool isResized = false;
 
 	while (!stopThread)
 	{
-		cap >> FRAME;
+		cv::Size targetSize(dlg->m_ResizeFrameWidth, dlg->m_ResizeFrameHeight);
 
+		CAP >> FRAME;
+
+		double scaleWidth = static_cast<double>(targetSize.width) / FRAME.cols;
+		double scaleHeight = static_cast<double>(targetSize.height) / FRAME.rows;
+		double scale = std::min(scaleWidth, scaleHeight);
+
+		// Новый размер изображения с сохранением пропорций
+		int newWidth = static_cast<int>(FRAME.cols * scale);
+		int newHeight = static_cast<int>(FRAME.rows * scale);
+
+		cv::resize(FRAME, resizedFrame, cv::Size(newWidth, newHeight), 0, 0, cv::INTER_LINEAR);
+
+		// Создаем рамку
+		cv::Mat outputFrame(targetSize, FRAME.type(), cv::Scalar(0, 255, 255));
+		int xOffset = (targetSize.width - newWidth) / 2;
+		int yOffset = (targetSize.height - newHeight) / 2;
+
+		// Вставляем масштабированное изображение в центр области
+		resizedFrame.copyTo(outputFrame(cv::Rect(xOffset, yOffset, newWidth, newHeight)));
+
+		resizedFrame = outputFrame;
+		
 		if (FRAME.empty())
 		{
 			continue;
 		}
 
 		// Обработка изображения
-		cv::cvtColor(FRAME, EDGES, cv::COLOR_BGR2GRAY);
+		cv::cvtColor(resizedFrame, EDGES, cv::COLOR_BGR2GRAY); // FRAME
 		cv::GaussianBlur(EDGES, EDGES, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
 		cv::Canny(EDGES, EDGES, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
 
 		// Рисование перекрестья
-		int centerX = FRAME.cols / 2;
-		int centerY = FRAME.rows / 2;
-		cv::Scalar crossColor(0, 0, 255); // Цвет перекрестья: красный (BGR)
+		const int lineOffset = 45;
+		int centerX = resizedFrame.cols / 2;	// FRAME
+		int centerY = resizedFrame.rows / 2;	// FRAME
+		cv::Scalar crossColor(0, 0, 255);		// Цвет перекрестья: красный (BGR)
 		int thickness = 2;
 
 		// Горизонтальная линия
-		cv::line(FRAME, cv::Point(25, centerY), cv::Point(FRAME.cols - 25, centerY), crossColor, thickness);
+		cv::line(
+			resizedFrame // FRAME
+			, cv::Point(lineOffset, centerY)
+			, cv::Point(resizedFrame.cols - lineOffset, centerY)
+			, crossColor
+			, thickness);	
 
 		// Вертикальная линия
-		cv::line(FRAME, cv::Point(centerX, 25), cv::Point(centerX, FRAME.rows - 25), crossColor, thickness);
+		cv::line(
+			resizedFrame // FRAME
+			, cv::Point(centerX, lineOffset)
+			, cv::Point(centerX, resizedFrame.rows - lineOffset)
+			, crossColor
+			, thickness);	
 
-		DrawFrameToPictureControl(pWnd, FRAME);
+		// Изменение размеров PictureControl под отмасштабированный кадр
+		CRect* rect = new CRect();
+		CWnd* pWnd = dlg->GetDlgItem(IDC_PICTURE_CONTROL);
+
+		if (pWnd)
+		{
+			pWnd->GetWindowRect(rect);
+			ScreenToClient(pWnd->GetSafeHwnd(), (LPPOINT)rect);	// Преобразование координат в клиентские
+
+			// Установка новых размеров
+			rect->right = rect->left + resizedFrame.cols;
+			rect->bottom = rect->top + resizedFrame.rows;
+			pWnd->MoveWindow(rect);
+		}
+
+		delete rect;
+
+
+		DrawFrameToPictureControl(dlg, EDGES); // FRAME
 	}
 
 	return 0;
@@ -156,6 +209,8 @@ COpenCvWithMFCDlg::COpenCvWithMFCDlg(CWnd* pParent /*=NULL*/)
 	, m_CannyThreshold2(90)
 	, m_KernelSize1(7)
 	, m_KernelSize2(7)
+	, m_ResizeFrameWidth(800)
+	, m_ResizeFrameHeight(600)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -171,6 +226,10 @@ void COpenCvWithMFCDlg::DoDataExchange(CDataExchange* pDX)
 	DDV_MinMaxInt(pDX, m_KernelSize1, 1, 101);
 	DDX_Text(pDX, IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, m_KernelSize2);
 	DDV_MinMaxInt(pDX, m_KernelSize2, 1, 101);
+	DDX_Text(pDX, IDC_EDIT_RESIZE_FRAME_WIDTH, m_ResizeFrameWidth);
+	DDV_MinMaxInt(pDX, m_ResizeFrameWidth, 640, 1920);
+	DDX_Text(pDX, IDC_EDIT_RESIZE_FRAME_HEIGHT, m_ResizeFrameHeight);
+	DDV_MinMaxInt(pDX, m_ResizeFrameHeight, 480, 1080);
 }
 
 BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
@@ -187,6 +246,8 @@ BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
 	ON_EN_UPDATE(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, &COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2)
 	ON_BN_CLICKED(IDC_BUTTON_SAVE_PICTURE, &COpenCvWithMFCDlg::OnBnClickedButtonSavePicture)
 	ON_BN_CLICKED(IDC_BUTTON_COMPARE_FRAME, &COpenCvWithMFCDlg::OnBnClickedButtonCompareFrame)
+	ON_EN_UPDATE(IDC_EDIT_RESIZE_FRAME_WIDTH, &COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameWidth)
+	ON_EN_UPDATE(IDC_EDIT_RESIZE_FRAME_HEIGHT, &COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameHeight)
 END_MESSAGE_MAP()
 
 
@@ -227,6 +288,8 @@ BOOL COpenCvWithMFCDlg::OnInitDialog()
 	SetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_2, m_CannyThreshold2);
 	SetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1, m_KernelSize1);
 	SetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, m_KernelSize2);
+	SetDlgItemInt(IDC_EDIT_RESIZE_FRAME_WIDTH, m_ResizeFrameWidth);
+	SetDlgItemInt(IDC_EDIT_RESIZE_FRAME_HEIGHT, m_ResizeFrameHeight);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -282,47 +345,32 @@ HCURSOR COpenCvWithMFCDlg::OnQueryDragIcon()
 
 void COpenCvWithMFCDlg::OnBnClickedButtonStart()
 {
-	if (!cap.isOpened())
+	if (!CAP.isOpened())
 	{
-		cap.open(0);
+		CAP.open(0);
 	}
 
-	if (!cap.isOpened())
+	if (!CAP.isOpened())
 	{
 		MessageBox(_T("Не удалось открыть камеру!"));
 		return;
 	}
 
-	if (!cap.set(cv::CAP_PROP_FRAME_WIDTH, 640) || cap.get(cv::CAP_PROP_FRAME_WIDTH) != 640)
+	const int defaultFrameWidth = 1280;
+	const int defaultFrameHeight = 1024;
+
+	if (!CAP.set(cv::CAP_PROP_FRAME_WIDTH, defaultFrameWidth))
 	{
 		MessageBox(_T("Не удалось задать ширину кадра камеры!"));
 		return;
 	}
 
-	if (!cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480) || cap.get(cv::CAP_PROP_FRAME_HEIGHT) != 480)
+	if (!CAP.set(cv::CAP_PROP_FRAME_HEIGHT, defaultFrameHeight))
 	{
 		MessageBox(_T("Не удалось задать высоту кадра камеры!"));
 		return;
 	}
 	
-	int frameWidth = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-	int frameHeight = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
-
-	// Получение PictureControl
-	CWnd* pWnd = GetDlgItem(IDC_PICTURE_CONTROL); // Замените IDC_PICTURE_CONTROL на ID вашего PictureControl
-
-	if (pWnd)
-	{
-		// Изменение размеров PictureControl
-		CRect rect;
-		pWnd->GetWindowRect(&rect);
-		ScreenToClient(&rect);	// Преобразование координат в клиентские
-
-		// Установка новых размеров
-		rect.right = rect.left + frameWidth;
-		rect.bottom = rect.top + frameHeight;
-		pWnd->MoveWindow(&rect);
-	}
 
 	stopThread = false;
 	AfxBeginThread(CameraCaptureThread, this); // Запускаем поток
@@ -335,7 +383,7 @@ void COpenCvWithMFCDlg::OnBnClickedButtonStop()
 	cap.release();       // Освобождаем камеру*/
 
 	stopThread = true;
-	cap.release();     
+	CAP.release();     
 }
 
 
@@ -352,28 +400,28 @@ afx_msg LRESULT COpenCvWithMFCDlg::OnUpdatePicture(WPARAM wParam, LPARAM lParam)
 void COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold1()
 {
 	m_CannyThreshold1 = GetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_1);
-	UpdateData(FALSE);
+	//UpdateData(FALSE);
 }
 
 
 void COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold2()
 {
 	m_CannyThreshold2 = GetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_2);
-	UpdateData(FALSE);
+	//UpdateData(FALSE);
 }
 
 
 void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize1()
 {
 	m_KernelSize1 = (GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1) % 2 != 0) ? GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1) : 1;
-	UpdateData(FALSE);
+	//UpdateData(FALSE);
 }
 
 
 void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2()
 {
 	m_KernelSize2 = (GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) % 2 != 0) ? GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) : 1;
-	UpdateData(FALSE);
+	//UpdateData(FALSE);
 }
 
 
@@ -389,4 +437,16 @@ void COpenCvWithMFCDlg::OnBnClickedButtonSavePicture()
 void COpenCvWithMFCDlg::OnBnClickedButtonCompareFrame()
 {
 	// TODO: Add your control notification handler code here
+}
+
+
+void COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameWidth()
+{
+	m_ResizeFrameWidth = GetDlgItemInt(IDC_EDIT_RESIZE_FRAME_WIDTH) < 640 ? 640 : GetDlgItemInt(IDC_EDIT_RESIZE_FRAME_WIDTH);
+}
+
+
+void COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameHeight()
+{
+	m_ResizeFrameHeight = GetDlgItemInt(IDC_EDIT_RESIZE_FRAME_HEIGHT) < 480 ? 480 : GetDlgItemInt(IDC_EDIT_RESIZE_FRAME_HEIGHT);
 }
