@@ -102,7 +102,7 @@ UINT CameraCaptureThread(LPVOID pParam)
 
 		cv::resize(FRAME, resizedFrame, cv::Size(newWidth, newHeight), 0, 0, cv::INTER_LINEAR);
 
-		// Создаем рамку
+		// Создаем рамку (letterbox)
 		cv::Mat outputFrame(targetSize, FRAME.type(), cv::Scalar(0, 255, 255));
 		int xOffset = (targetSize.width - newWidth) / 2;
 		int yOffset = (targetSize.height - newHeight) / 2;
@@ -161,7 +161,6 @@ UINT CameraCaptureThread(LPVOID pParam)
 		}
 
 		delete rect;
-
 
 		DrawFrameToPictureControl(dlg, EDGES); // FRAME
 	}
