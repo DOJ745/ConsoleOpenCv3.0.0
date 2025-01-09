@@ -486,385 +486,36 @@
 //    return 0;
 //}
 
-// ===== Keypoints select and compute =====
-
-cv::Mat templateImg, mainImg, copyMainImg;
-std::vector<cv::Point2f> selectedPoints;
-
-void onMouse(int event, int x, int y, int, void*) 
-{
-    if (event == cv::EVENT_LBUTTONDOWN) 
-    {
-        selectedPoints.emplace_back(cv::Point2f(x, y));
-        std::cout << "Выбрана точка: (" << x << ", " << y << ")\n";
-
-        cv::circle(copyMainImg, cv::Point(x, y), 5, cv::Scalar(0, 255, 0), -1);
-        cv::imshow("Select Points", copyMainImg);
-    }
-}
-
-int main() 
-{
-    setlocale(LC_ALL, "Russian");
-
-    int imgReadMode = cv::IMREAD_GRAYSCALE;
-    const char* templateImgFile = "images/HD-CHIP-SURFACE.jpg";
-    const char* mainImgFile = "images/HD-CHIP-SURFACE-TURN-4DGR.jpg";//"images/HD-CHIP.jpg";
-    
-    templateImg = cv::imread(templateImgFile, imgReadMode);
-
-    if (templateImg.empty())
-    {
-        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
-        return -1;
-    }
-
-    mainImg = cv::imread(mainImgFile, imgReadMode);
-
-    if (mainImg.empty())
-    {
-        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
-        return -1;
-    }
-
-    const double resizeTemplate = 0.5;
-    const double resizeMain = 0.5;
-
-    cv::resize(templateImg, templateImg, cv::Size(), resizeTemplate, resizeTemplate, cv::INTER_AREA);
-    cv::resize(mainImg, mainImg, cv::Size(), resizeMain, resizeMain, cv::INTER_AREA);
-
-    copyMainImg = mainImg.clone();
-
-    cv::imshow("Select Points", mainImg);
-    cv::setMouseCallback("Select Points", onMouse);
-
-    std::cout << "Выберите точки на изображении. Нажмите клавишу для завершения.\n";
-
-    while (true)
-    {
-        char key = cv::waitKey(0);
-        
-        if (key)
-        {
-            break;
-        }
-    }
-
-    std::cout << "Выбранные точки:\n";
-
-    for (int i = 0; i < selectedPoints.size(); i++)
-    {
-        std::cout << "(" << selectedPoints[i].x << ", " << selectedPoints[i].y << ")\n";
-    }
-
-    // Преобразуем выбранные точки в KeyPoint для дальнейшего использования
-    std::vector<cv::KeyPoint> templateKeypoints, mainImgKeypoints;
-
-    /*for (int i = 0; i < selectedPoints.size(); i++)
-    {
-        templateKeypoints.emplace_back(cv::KeyPoint(selectedPoints[i].x, selectedPoints[i].y, 10)); // Указываем координаты и размер
-    }*/
-
-    cv::Mat templateDescriptors, mainImgDescriptors;
-    cv::Mat mask;
-    cv::Ptr<cv::ORB> orb = cv::ORB::create(
-        		500,					// Максимальное количество ключевых точек
-        		1.4f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
-        		10,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
-        		10,					    // Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
-        		0,						// Первый уровень пирамиды
-        		2,						// WTA_K - параметр определяет количество точек в окрестности ключевой точки, которые сравниваются для генерации одного бита дескриптора
-        		cv::ORB::FAST_SCORE,	// Метод оценки
-        		18,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
-        		50						// Порог отклика -  это численная величина, характеризующая "выразительность" точки
-        	);
-    
-    cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
-    akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек
-    akaze->setNOctaves(4);                                  // Количество октав (уровней пирамиды)
-    akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве
-    akaze->setDescriptorSize(0);                            // Размер дескриптора (по умолчанию максимальный)
-    akaze->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);   // Тип дескриптора
-    
-    try
-    {
-        orb->detectAndCompute(templateImg, mask, templateKeypoints, templateDescriptors);
-        //akaze->detectAndCompute(templateImg, mask, templateKeypoints, templateDescriptors);
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "Исключение: " << e.what() << "\n";
-    }
-
-    try
-    {
-        orb->detectAndCompute(mainImg, mask, mainImgKeypoints, mainImgDescriptors);
-        //akaze->detectAndCompute(mainImg, mask, mainImgKeypoints, mainImgDescriptors);
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "Исключение: " << e.what() << "\n";
-    }
-
-    // Визуализация ключевых точек, найденных по алгоритму
-    cv::Mat templateImgKeypoints;
-
-    cv::drawKeypoints(
-        templateImg
-        , templateKeypoints
-        , templateImgKeypoints
-        , cv::Scalar(0, 0, 255)
-        , cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-
-    cv::imshow("Found keypoints on template image", templateImgKeypoints);
-
-    // Сортировка совпадений по расстоянию
-	cv::BFMatcher matcher(cv::NORM_HAMMING, true);
-	std::vector<cv::DMatch> matches;
-	matcher.match(templateDescriptors, mainImgDescriptors, matches);
-
-    std::sort(
-        matches.begin()
-        , matches.end()
-        , [](const cv::DMatch& a, const cv::DMatch& b) { 
-            return a.distance < b.distance; 
-        });
-
-    std::vector<cv::DMatch> goodMatches;
-
-    // Фильтрация совпадений
-    const double maxDistance = 50.0; // Порог расстояния для фильтрации (50.0)
-
-    for (int i = 0; i < matches.size(); i++)
-    {
-        if (matches[i].distance < maxDistance)
-        {
-            goodMatches.push_back(matches[i]);
-        }
-    }
-
-    // Сортировка совпадений по Lowe's Ratio Test
-    cv::BFMatcher knnMatcher(cv::NORM_L2);
-    std::vector<std::vector<cv::DMatch>> knnMatches;
-    knnMatcher.knnMatch(templateDescriptors, mainImgDescriptors, knnMatches, 2);
-
-    const float ratioThresh = 0.7f; // 0.7f - default
-
-    std::vector<cv::DMatch> goodMatchesKnn;
-
-    for (size_t i = 0; i < knnMatches.size(); i++)
-    {
-        // Проверяем, есть ли хотя бы два совпадения
-        if (knnMatches[i].size() < 2) 
-        {
-            continue;
-        }
-
-        float distance1 = knnMatches[i][0].distance;
-        float distance2 = knnMatches[i][1].distance;
-
-        if (distance1 < ratioThresh * distance2)
-        {
-            goodMatchesKnn.push_back(knnMatches[i][0]);
-        }
-    }
-    int debugSizeKnn = goodMatchesKnn.size();
-
-    int debugKeypoints1Size = templateKeypoints.size();
-    int debugKeypoints2Size = mainImgKeypoints.size();
-    int debugSizeDistance = goodMatches.size();
-
-    // Визуализация совпадений
-	cv::Mat matchedImage;
-
-	cv::drawMatches(
-        templateImg
-		, templateKeypoints
-		, mainImg
-		, mainImgKeypoints
-		, goodMatches
-		, matchedImage
-		, cv::Scalar::all(-1)
-		, cv::Scalar::all(-1)
-		, std::vector<char>()
-		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
-
-    cv::imshow("Matched Keypoints ORB", matchedImage);
-
-    double matchPercentage = (double)goodMatches.size() / (double)templateKeypoints.size() * 100.0;
-	std::cout << "Найдено совпадений (фильтрация по расстоянию): " << matches.size() << "\n";
-	std::cout << "Общее количество ключевых точек в шаблоне: " << templateKeypoints.size() << "\n";
-	std::cout << "Количество хороших совпадений: " << goodMatches.size() << "\n";
-	std::cout << "Процент совпадения: " << matchPercentage << "%" << "\n";
-
-    double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)templateKeypoints.size() * 100.0;
-    std::cout << "Найдено совпадений (фильтрация по KNN): " << knnMatches.size() << "\n";
-    std::cout << "Общее количество ключевых точек в шаблоне: " << templateKeypoints.size() << "\n";
-    std::cout << "Количество хороших совпадений: " << goodMatchesKnn.size() << "\n";
-    std::cout << "Процент совпадения: " << matchPercentageKnn << "%" << "\n";
-
-	cv::Mat result;
-	cv::matchTemplate(mainImg, templateImg, result, cv::TM_CCOEFF_NORMED);
-
-	double minVal, maxVal;
-	cv::Point minLoc, maxLoc;
-	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
-
-    std::cout << "Шаблонное совпадение (максимальная корреляция): " << maxVal << "\n";
-
-    // Пороговое значение корреляции
-	if (maxVal > 0.8) 
-	{ 
-		std::cout << "Совпадение подтверждено через шаблонное сравнение." << "\n";
-	}
-	else 
-	{
-        std::cout << "Совпадение не подтверждено.\n";
-	}
-
-    // Размер шаблона
-    cv::Size templateSize = templateImg.size();
-
-    // Рисуем прямоугольник на оригинальном изображении
-    cv::rectangle(
-        mainImg,
-        maxLoc,                                                                     // Верхний левый угол
-        cv::Point(maxLoc.x + templateSize.width, maxLoc.y + templateSize.height),   // Нижний правый угол
-        cv::Scalar(0, 0, 255),                                                      
-        2                                                                           // Толщина линии
-    );
-
-    cv::imshow("Detected Template Area", mainImg);
-
-    std::vector<cv::Point2f> points1, points2;
-
-    for (size_t i = 0; i < goodMatches.size(); i++)
-    {
-        points1.push_back(templateKeypoints[goodMatches[i].queryIdx].pt);
-        points2.push_back(mainImgKeypoints[goodMatches[i].trainIdx].pt);
-    }
-
-    cv::Mat homography = findHomography(points1, points2, cv::RANSAC);
-
-    if (homography.empty())
-    {
-        std::cout << "Гомография не найдена.'n";
-        return -1;
-    }
-
-    // 5. Извлечение угла поворота
-    double angle = atan2(homography.at<double>(1, 0), homography.at<double>(0, 0)) * 180.0 / CV_PI;
-
-    std::cout << "Угол поворота: " << angle << " градусов\n";
-
-    cv::Point2f center(copyMainImg.cols / 2.0F, copyMainImg.rows / 2.0F);
-
-    cv::Mat rotationMatrix = getRotationMatrix2D(center, angle, 1.0);
-
-    // Определяем размер изображения после преобразования
-    cv::Rect2f bbox = cv::RotatedRect(cv::Point2f(), copyMainImg.size(), angle).boundingRect();
-    rotationMatrix.at<double>(0, 2) += bbox.width / 2.0 - copyMainImg.cols / 2.0;
-    rotationMatrix.at<double>(1, 2) += bbox.height / 2.0 - copyMainImg.rows / 2.0;
-
-    // Применяем поворот
-    cv::Mat restoredImg;
-    warpAffine(copyMainImg, restoredImg, rotationMatrix, bbox.size());
-
-    imshow("FINAL rotated image", restoredImg);
-
-    cv::waitKey(0);
-
-    return 0;
-}
-
-//// ===== Select ROI by mouse =====
+//// ===== Keypoints select and compute =====
 //
-//void setPointInImage(const int width, const int height, int& x, int& y)
-//{
-//    if (x > width)
-//    {
-//        x = width;
-//    }
-//
-//    if (x < 0)
-//    {
-//        x = 0;
-//    }
-//
-//    if (y > height)
-//    {
-//        y = height;
-//    }
-//
-//    if (y < 0)
-//    {
-//        y = 0;
-//    }
-//}
-//
-//bool isDrawing = false;
-//cv::Mat templateImg, mainImg, tempImg; 
-//cv::Point startPoint, centerPoint, endPoint;
+//cv::Mat templateImg, mainImg, copyMainImg;
 //std::vector<cv::Point2f> selectedPoints;
 //
 //void onMouse(int event, int x, int y, int, void*) 
 //{
-//    switch (event) 
+//    if (event == cv::EVENT_LBUTTONDOWN) 
 //    {
-//    case cv::EVENT_LBUTTONDOWN:
-//        isDrawing = true;
-//        startPoint = cv::Point(x, y);
-//        cv::circle(mainImg, startPoint, 5, cv::Scalar(0, 255, 0), -1);
-//        break;
+//        selectedPoints.emplace_back(cv::Point2f(x, y));
+//        std::cout << "Выбрана точка: (" << x << ", " << y << ")\n";
 //
-//    case cv::EVENT_MOUSEMOVE:
-//
-//        if (isDrawing)
-//        {
-//            tempImg = mainImg.clone();
-//            
-//            setPointInImage(tempImg.cols, tempImg.rows, x, y);
-//
-//            endPoint = cv::Point(x, y);
-//
-//            endPoint = cv::Point(
-//                x < 0 ? 0 : x
-//                , y < 0 ? 0 : y);
-//
-//            cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
-//        }
-//        break;
-//
-//    case cv::EVENT_LBUTTONUP:
-//        isDrawing = false;
-//
-//        setPointInImage(mainImg.cols, mainImg.rows, x, y);
-//        endPoint = cv::Point(x, y);
-//
-//        cv::rectangle(mainImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
-//        cv::circle(mainImg, endPoint, 5, cv::Scalar(0, 255, 0), -1);
-//
-//        centerPoint = cv::Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
-//
-//        cv::circle(mainImg, centerPoint, 15, cv::Scalar(255, 0, 0), -1);
-//        break;
+//        cv::circle(copyMainImg, cv::Point(x, y), 5, cv::Scalar(0, 255, 0), -1);
+//        cv::imshow("Select Points", copyMainImg);
 //    }
 //}
 //
-//int main()
+//int main() 
 //{
 //    setlocale(LC_ALL, "Russian");
 //
 //    int imgReadMode = cv::IMREAD_GRAYSCALE;
 //    const char* templateImgFile = "images/HD-CHIP-SURFACE.jpg";
-//    const char* mainImgFile = "images/HD-CHIP.jpg";
-//
+//    const char* mainImgFile = "images/HD-CHIP-SURFACE-TURN.jpg";//"images/HD-CHIP.jpg";
+//    
 //    templateImg = cv::imread(templateImgFile, imgReadMode);
 //
 //    if (templateImg.empty())
 //    {
-//        std::cerr << "Ошибка: не удалось загрузить изображение " << templateImgFile << ".\n";
+//        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
 //        return -1;
 //    }
 //
@@ -872,38 +523,444 @@ int main()
 //
 //    if (mainImg.empty())
 //    {
-//        std::cerr << "Ошибка: не удалось загрузить изображение " << mainImgFile << ".\n";
+//        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
 //        return -1;
 //    }
 //
-//    const double resizeTemplate = 0.20;
-//    const double resizeMain = 0.20;
+//    const double resizeTemplate = 0.5;
+//    const double resizeMain = 0.5;
 //
 //    cv::resize(templateImg, templateImg, cv::Size(), resizeTemplate, resizeTemplate, cv::INTER_AREA);
 //    cv::resize(mainImg, mainImg, cv::Size(), resizeMain, resizeMain, cv::INTER_AREA);
 //
-//    // Преобразуем изображение в 3-канальный формат (BGR) для отрисовки RGB палитры
-//    // Серый цвет останется таким же, потому что значения для каждого канала будут одинаковы
-//    cv::cvtColor(mainImg, mainImg, cv::COLOR_GRAY2BGR);
+//    copyMainImg = mainImg.clone();
 //
-//    tempImg = mainImg.clone();
-//    cv::namedWindow("Select ROI");
-//    cv::setMouseCallback("Select ROI", onMouse);
+//    cv::imshow("Select Points", mainImg);
+//    cv::setMouseCallback("Select Points", onMouse);
+//
+//    std::cout << "Выберите точки на изображении. Нажмите клавишу для завершения.\n";
 //
 //    while (true)
 //    {
-//        cv::imshow("Select ROI", isDrawing ? tempImg : mainImg);
-//
-//        char key = cv::waitKey(1);
-//
-//        if (key == 'q' || key == 27) 
+//        char key = cv::waitKey(0);
+//        
+//        if (key)
 //        {
 //            break;
 //        }
 //    }
 //
+//    std::cout << "Выбранные точки:\n";
+//
+//    for (int i = 0; i < selectedPoints.size(); i++)
+//    {
+//        std::cout << "(" << selectedPoints[i].x << ", " << selectedPoints[i].y << ")\n";
+//    }
+//
+//    // Преобразуем выбранные точки в KeyPoint для дальнейшего использования
+//    std::vector<cv::KeyPoint> templateKeypoints, mainImgKeypoints;
+//
+//    /*for (int i = 0; i < selectedPoints.size(); i++)
+//    {
+//        templateKeypoints.emplace_back(cv::KeyPoint(selectedPoints[i].x, selectedPoints[i].y, 10)); // Указываем координаты и размер
+//    }*/
+//
+//    cv::Mat templateDescriptors, mainImgDescriptors;
+//    cv::Ptr<cv::ORB> orb = cv::ORB::create(
+//        		500,			        // Максимальное количество ключевых точек
+//        		1.2f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
+//        		10,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
+//        		10,					    // Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
+//        		0,						// Первый уровень пирамиды
+//        		2,						// WTA_K - параметр определяет количество точек в окрестности ключевой точки, которые сравниваются для генерации одного бита дескриптора
+//        		cv::ORB::FAST_SCORE,	// Метод оценки
+//        		18,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
+//        		50						// Порог отклика -  это численная величина, характеризующая "выразительность" точки
+//        	);
+//    
+//    cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
+//    akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек
+//    akaze->setNOctaves(4);                                  // Количество октав (уровней пирамиды)
+//    akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве
+//    akaze->setDescriptorSize(0);                            // Размер дескриптора (по умолчанию максимальный)
+//    akaze->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);   // Тип дескриптора
+//    
+//    try
+//    {
+//        orb->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
+//        //akaze->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
+//
+//        if (templateKeypoints.empty())
+//        {
+//            std::cerr << "Ошибка: массив ключевых точек templateKeypoints пуст!\n";
+//            return -1;
+//        }
+//    }
+//    catch (const std::exception& e)
+//    {
+//        std::cerr << "Исключение: " << e.what() << "\n";
+//    }
+//
+//    try
+//    {
+//        orb->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
+//        //akaze->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
+//        
+//        if (mainImgKeypoints.empty())
+//        {
+//            std::cerr << "Ошибка: массив ключевых точек mainImgKeypoints пуст!\n";
+//            return -1;
+//        }
+//    }
+//    catch (const std::exception& e)
+//    {
+//        std::cerr << "Исключение: " << e.what() << "\n";
+//    }
+//
+//    // Визуализация ключевых точек, найденных по алгоритму
+//    cv::Mat templateImgFoundKeypoints;
+//
+//    cv::drawKeypoints(
+//        templateImg
+//        , templateKeypoints
+//        , templateImgFoundKeypoints
+//        , cv::Scalar(0, 0, 255)
+//        , cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//
+//    cv::imshow("Found keypoints on template image", templateImgFoundKeypoints);
+//
+//    // Сортировка совпадений по расстоянию
+//	cv::BFMatcher matcher(cv::NORM_HAMMING, true);
+//	std::vector<cv::DMatch> matches;
+//	matcher.match(templateDescriptors, mainImgDescriptors, matches);
+//
+//    std::sort(
+//        matches.begin()
+//        , matches.end()
+//        , [](const cv::DMatch& a, const cv::DMatch& b) { 
+//            return a.distance < b.distance; 
+//        });
+//
+//    std::vector<cv::DMatch> goodMatches;
+//
+//    // Фильтрация совпадений
+//    const double maxDistance = 50.0; // Порог расстояния для фильтрации по расстоянию
+//
+//    for (int i = 0; i < matches.size(); i++)
+//    {
+//        if (matches[i].distance < maxDistance)
+//        {
+//            goodMatches.push_back(matches[i]);
+//        }
+//    }
+//
+//    // Сортировка совпадений по Lowe's Ratio Test
+//    // Lowe's Ratio Test проверяет, 
+//    // является ли расстояние до лучшего совпадения 
+//    // существенно меньше расстояния до второго ближайшего совпадения
+//    cv::BFMatcher knnMatcher(cv::NORM_HAMMING);
+//    std::vector<std::vector<cv::DMatch>> knnMatches;
+//    knnMatcher.knnMatch(templateDescriptors, mainImgDescriptors, knnMatches, 2);
+//
+//    // Если отношение расстояний меньше заданного порога 
+//    // (обычно 0.7 или 0.75), совпадение считается хорошим
+//    const float ratioThresh = 0.8f; // 0.7f - default
+//
+//    std::vector<cv::DMatch> goodMatchesKnn;
+//
+//    for (int i = 0; i < knnMatches.size(); i++)
+//    {
+//        // Проверяем, есть ли хотя бы два совпадения
+//        if (knnMatches[i].size() >= 2) 
+//        { 
+//            const cv::DMatch& bestMatch = knnMatches[i][0];
+//            const cv::DMatch& secondBestMatch = knnMatches[i][1];
+//
+//            // Проверяем индексы на соответствие массивам ключевых точек
+//            if (bestMatch.queryIdx >= 0 
+//                && bestMatch.queryIdx < templateKeypoints.size() 
+//                && bestMatch.trainIdx >= 0 
+//                && bestMatch.trainIdx < mainImgKeypoints.size()) 
+//            {
+//                if (bestMatch.distance < ratioThresh * secondBestMatch.distance)
+//                {
+//                    goodMatchesKnn.push_back(bestMatch);
+//                }
+//            }
+//        }
+//    }
+//
+//    int debugSizeKnn = goodMatchesKnn.size();
+//    int debugKeypoints1Size = templateKeypoints.size();
+//    int debugKeypoints2Size = mainImgKeypoints.size();
+//    int debugSizeDistance = goodMatches.size();
+//
+//    // Визуализация совпадений
+//	cv::Mat matchedImage, matchedImageKnn;
+//
+//	cv::drawMatches(
+//        templateImg
+//		, templateKeypoints
+//		, mainImg
+//		, mainImgKeypoints
+//		, goodMatches
+//		, matchedImage
+//		, cv::Scalar::all(-1)
+//		, cv::Scalar::all(-1)
+//		, std::vector<char>()
+//		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+//
+//    cv::imshow("Matched Keypoints ORB (Distance)", matchedImage);
+//
+//    //double matchPercentage = (double)goodMatches.size() / (double)templateKeypoints.size() * 100.0;
+//
+//    double matchPercentage = (double)goodMatches.size() / (double)mainImgKeypoints.size() * 100.0;
+//
+//    std::cout << "Общее количество ключевых точек в шаблоне: " << templateKeypoints.size() << "\n";
+//    std::cout << "Общее количество ключевых точек в сравниваемом изображении: " << mainImgKeypoints.size() << "\n";
+//	std::cout << "Найдено совпадений (фильтрация по расстоянию): " << matches.size() << "\n";
+//	std::cout << "Количество хороших совпадений: " << goodMatches.size() << "\n";
+//	std::cout << "Процент совпадения: " << matchPercentage << "%" << "\n";
+//
+//    cv::drawMatches(
+//        templateImg
+//        , templateKeypoints
+//        , mainImg
+//        , mainImgKeypoints
+//        , goodMatchesKnn
+//        , matchedImageKnn
+//        , cv::Scalar::all(-1)
+//        , cv::Scalar::all(-1)
+//        , std::vector<char>()
+//        , cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+//
+//    cv::imshow("Matched Keypoints ORB (KNN)", matchedImageKnn);
+//
+//    //double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)templateKeypoints.size() * 100.0;
+//    
+//    double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)mainImgKeypoints.size() * 100.0;
+//
+//    std::cout << "Найдено совпадений (фильтрация по KNN): " << knnMatches.size() << "\n";
+//    std::cout << "Количество хороших совпадений: " << goodMatchesKnn.size() << "\n";
+//    std::cout << "Процент совпадения: " << matchPercentageKnn << "%" << "\n";
+//
+//	cv::Mat result;
+//	cv::matchTemplate(mainImg, templateImg, result, cv::TM_CCOEFF_NORMED);
+//
+//	double minVal, maxVal;
+//	cv::Point minLoc, maxLoc;
+//	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+//
+//    std::cout << "Шаблонное совпадение (максимальная корреляция): " << maxVal << "\n";
+//
+//    // Пороговое значение корреляции
+//	if (maxVal > 0.8) 
+//	{ 
+//		std::cout << "Совпадение подтверждено через шаблонное сравнение." << "\n";
+//	}
+//	else 
+//	{
+//        std::cout << "Совпадение не подтверждено.\n";
+//	}
+//
+//    // Размер шаблона
+//    cv::Size templateSize = templateImg.size();
+//
+//    // Рисуем прямоугольник на оригинальном изображении
+//    cv::rectangle(
+//        mainImg,
+//        maxLoc,                                                                     // Верхний левый угол
+//        cv::Point(maxLoc.x + templateSize.width, maxLoc.y + templateSize.height),   // Нижний правый угол
+//        cv::Scalar(0, 0, 255),                                                      
+//        2                                                                           // Толщина линии
+//    );
+//
+//    cv::imshow("Detected Template Area", mainImg);
+//
+//    std::vector<cv::Point2f> points1, points2;
+//
+//    for (size_t i = 0; i < goodMatches.size(); i++)
+//    {
+//        points1.push_back(templateKeypoints[goodMatches[i].queryIdx].pt);
+//        points2.push_back(mainImgKeypoints[goodMatches[i].trainIdx].pt);
+//    }
+//
+//    cv::Mat homography = findHomography(points1, points2, cv::RANSAC);
+//
+//    if (homography.empty())
+//    {
+//        std::cout << "Гомография не найдена.\n";
+//        return -1;
+//    }
+//
+//    // 5. Извлечение угла поворота
+//    double angle = atan2(homography.at<double>(1, 0), homography.at<double>(0, 0)) * 180.0 / CV_PI;
+//
+//    std::cout << "Угол поворота: " << angle << " градусов\n";
+//
+//    cv::Point2f center(copyMainImg.cols / 2.0F, copyMainImg.rows / 2.0F);
+//
+//    cv::Mat rotationMatrix = getRotationMatrix2D(center, angle, 1.0);
+//
+//    // Определяем размер изображения после преобразования
+//    cv::Rect2f bbox = cv::RotatedRect(cv::Point2f(), copyMainImg.size(), angle).boundingRect();
+//    rotationMatrix.at<double>(0, 2) += bbox.width / 2.0 - copyMainImg.cols / 2.0;
+//    rotationMatrix.at<double>(1, 2) += bbox.height / 2.0 - copyMainImg.rows / 2.0;
+//
+//    // Применяем поворот
+//    cv::Mat restoredImg;
+//    warpAffine(copyMainImg, restoredImg, rotationMatrix, bbox.size());
+//
+//    imshow("FINAL rotated image", restoredImg);
+//
+//    cv::waitKey(0);
+//
 //    return 0;
 //}
+
+// ===== Select ROI by mouse =====
+
+void setPointInImage(const int width, const int height, int& x, int& y)
+{
+    if (x > width)
+    {
+        x = width;
+    }
+
+    if (x < 0)
+    {
+        x = 0;
+    }
+
+    if (y > height)
+    {
+        y = height;
+    }
+
+    if (y < 0)
+    {
+        y = 0;
+    }
+}
+
+bool isDrawing = false;
+cv::Mat templateImg, mainImg, tempImg; 
+cv::Point startPoint, centerPoint, endPoint;
+
+void onMouse(int event, int x, int y, int, void*) 
+{
+    switch (event) 
+    {
+    case cv::EVENT_LBUTTONDOWN:
+        isDrawing = true;
+        startPoint = cv::Point(x, y);
+        cv::circle(tempImg, startPoint, 5, cv::Scalar(0, 255, 0), -1);
+        break;
+
+    case cv::EVENT_MOUSEMOVE:
+
+        if (isDrawing)
+        {
+            tempImg = mainImg.clone();
+            
+            setPointInImage(tempImg.cols, tempImg.rows, x, y);
+
+            endPoint = cv::Point(x, y);
+
+            cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+        }
+        break;
+
+    case cv::EVENT_LBUTTONUP:
+        isDrawing = false;
+
+        setPointInImage(tempImg.cols, tempImg.rows, x, y);
+        endPoint = cv::Point(x, y);
+
+        cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+        cv::circle(tempImg, endPoint, 5, cv::Scalar(0, 255, 0), -1);
+
+        centerPoint = cv::Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
+
+        cv::circle(tempImg, centerPoint, 15, cv::Scalar(255, 0, 0), -1);
+        break;
+    }
+}
+
+int main()
+{
+    setlocale(LC_ALL, "Russian");
+
+    int imgReadMode = cv::IMREAD_GRAYSCALE;
+    const char* templateImgFile = "images/HD-CHIP-SURFACE.jpg";
+    const char* mainImgFile = "images/HD-CHIP.jpg";
+
+    templateImg = cv::imread(templateImgFile, imgReadMode);
+
+    if (templateImg.empty())
+    {
+        std::cerr << "Ошибка: не удалось загрузить изображение " << templateImgFile << ".\n";
+        return -1;
+    }
+
+    mainImg = cv::imread(mainImgFile, imgReadMode);
+
+    if (mainImg.empty())
+    {
+        std::cerr << "Ошибка: не удалось загрузить изображение " << mainImgFile << ".\n";
+        return -1;
+    }
+
+    const double resizeTemplate = 0.20;
+    const double resizeMain = 0.20;
+
+    cv::resize(templateImg, templateImg, cv::Size(), resizeTemplate, resizeTemplate, cv::INTER_AREA);
+    cv::resize(mainImg, mainImg, cv::Size(), resizeMain, resizeMain, cv::INTER_AREA);
+
+    // Преобразуем изображение в 3-канальный формат (BGR) для отрисовки RGB палитры
+    // Серый цвет останется таким же, потому что значения для каждого канала будут одинаковы
+    cv::cvtColor(mainImg, mainImg, cv::COLOR_GRAY2BGR);
+
+    tempImg = mainImg.clone();
+    cv::namedWindow("Select ROI");
+    cv::setMouseCallback("Select ROI", onMouse);
+
+    while (true)
+    {
+        cv::imshow("Select ROI",tempImg);
+
+        char key = cv::waitKey(1);
+
+        if (key == 'q' || key == 27) 
+        {
+            break;
+        }
+    }
+
+    cv::setMouseCallback("Select ROI", NULL);
+
+    // Min задаёт верхний левый угол прямоугольника
+    int x1 = std::min(startPoint.x, endPoint.x);
+    int y1 = std::min(startPoint.y, endPoint.y);
+    int x2 = std::max(startPoint.x, endPoint.x);
+    int y2 = std::max(startPoint.y, endPoint.y);
+
+    cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
+    cv::Mat imageRoi = mainImg(roiRect);
+
+    cv::imshow("ROI rect", imageRoi);
+
+    const int offset = 0;
+    cv::Rect imageRoiRect(offset, offset, imageRoi.size().width - offset, imageRoi.size().height - offset);
+
+    cv::imshow("Main image", mainImg);
+    cv::imshow("ROI", imageRoi);
+    cv::waitKey(0);
+
+    cv::imwrite("ROI.jpg", imageRoi);
+
+    return 0;
+}
 
 //// ===== Testing scaling =====
 //int main() 
