@@ -8,6 +8,7 @@
 #include "afxdialogex.h"
 #include "opencv2/opencv.hpp"
 #include <iostream>
+#include "TestDialog.h"
 #include <afxwin.h>
 
 #ifdef _DEBUG
@@ -15,13 +16,24 @@
 #endif
 
 cv::VideoCapture CAP; // Глобальный объект захвата камеры
-cv::Mat FRAME;
-cv::Mat EDGES;
+cv::Mat FRAME;		  // Исходный кадр камеры
+cv::Mat EDGES;		  // Обработанный кадр камеры
 
 const char* COMPARE_IMG = "compare.jpg";
 UINT_PTR TIMER_ID = 1;
 UINT TIMER_INTERVAL_MS = 1;
 volatile bool stopThread = false; // Флаг для остановки потока
+
+void onMouse(int event, int x, int y, int, void*)
+{
+	switch (event)
+	{
+	case cv::EVENT_LBUTTONDOWN:
+		cv::Point startPoint(x, y);
+		cv::circle(EDGES, startPoint, 5, cv::Scalar(0, 255, 0), -1);
+		break;
+	}
+}
 
 void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 {
@@ -162,6 +174,8 @@ UINT CameraCaptureThread(LPVOID pParam)
 
 		delete rect;
 
+		cv::setMouseCallback("", onMouse);
+
 		DrawFrameToPictureControl(dlg, EDGES); // FRAME
 	}
 
@@ -247,6 +261,7 @@ BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_COMPARE_FRAME, &COpenCvWithMFCDlg::OnBnClickedButtonCompareFrame)
 	ON_EN_UPDATE(IDC_EDIT_RESIZE_FRAME_WIDTH, &COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameWidth)
 	ON_EN_UPDATE(IDC_EDIT_RESIZE_FRAME_HEIGHT, &COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameHeight)
+	ON_BN_CLICKED(IDC_BUTTON_OPEN_DIALOG, &COpenCvWithMFCDlg::OnBnClickedButtonOpenDialog)
 END_MESSAGE_MAP()
 
 
@@ -448,4 +463,10 @@ void COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameWidth()
 void COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameHeight()
 {
 	m_ResizeFrameHeight = GetDlgItemInt(IDC_EDIT_RESIZE_FRAME_HEIGHT) < 480 ? 480 : GetDlgItemInt(IDC_EDIT_RESIZE_FRAME_HEIGHT);
+}
+
+void COpenCvWithMFCDlg::OnBnClickedButtonOpenDialog()
+{
+	TestDialog* dlg = new TestDialog();
+	dlg->DoModal();
 }

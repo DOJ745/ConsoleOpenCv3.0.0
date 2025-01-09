@@ -107,6 +107,7 @@
     <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="TestDialog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="OpenCvWithMFC.cpp" />
@@ -115,6 +116,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="TestDialog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="OpenCvWithMFC.rc" />

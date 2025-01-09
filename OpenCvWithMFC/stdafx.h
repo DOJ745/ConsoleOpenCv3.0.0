@@ -26,7 +26,9 @@
 
 #include <afxdisp.h>        // MFC Automation classes
 
-
+// Other includes
+//#include "opencv2/opencv.hpp"
+//#include <iostream>
 
 #ifndef _AFX_NO_OLE_SUPPORT
 #include <afxdtctl.h>           // MFC support for Internet Explorer 4 Common Controls

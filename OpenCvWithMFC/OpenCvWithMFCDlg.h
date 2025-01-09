@@ -55,4 +55,5 @@ public:
 	int m_ResizeFrameHeight;
 	afx_msg void OnEnUpdateEditResizeFrameWidth();
 	afx_msg void OnEnUpdateEditResizeFrameHeight();
+	afx_msg void OnBnClickedButtonOpenDialog();
 };
