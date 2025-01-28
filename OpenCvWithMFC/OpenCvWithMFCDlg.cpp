@@ -8,6 +8,7 @@
 #include "afxdialogex.h"
 #include "opencv2/opencv.hpp"
 #include <iostream>
+#include <windows.h>
 #include "TestDialog.h"
 #include <afxwin.h>
 
@@ -49,7 +50,6 @@ void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 		return;
 	}
 
-	// Получаем размеры Picture Control
 	CRect rect;
 	pPictureCtrl->GetClientRect(&rect);
 
@@ -87,13 +87,13 @@ void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 		&bInfo,                             // Информация о формате изображения
 		DIB_RGB_COLORS);                    // Интерпретация цветов (RGB)
 
-	::ReleaseDC(pPictureCtrl->m_hWnd, hdc); // Освобождаем HDC
+	::ReleaseDC(pPictureCtrl->m_hWnd, hdc);
 }
 
 // Потоковая функция для захвата кадров
 UINT CameraCaptureThread(LPVOID pParam)
 {
-	COpenCvWithMFCDlg* dlg = (COpenCvWithMFCDlg*)pParam;
+	COpenCvWithMFCDlg* dlg = static_cast<COpenCvWithMFCDlg*>(pParam);
 	CWnd* pWnd = dlg;
 	cv::Mat resizedFrame;
 	bool isResized = false;
@@ -130,7 +130,7 @@ UINT CameraCaptureThread(LPVOID pParam)
 		}
 
 		// Обработка изображения
-		cv::cvtColor(resizedFrame, EDGES, cv::COLOR_BGR2GRAY); // FRAME
+		cv::cvtColor(resizedFrame, EDGES, cv::COLOR_BGR2GRAY);
 		cv::GaussianBlur(EDGES, EDGES, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
 		cv::Canny(EDGES, EDGES, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
 
@@ -164,7 +164,7 @@ UINT CameraCaptureThread(LPVOID pParam)
 		if (pWnd)
 		{
 			pWnd->GetWindowRect(rect);
-			ScreenToClient(pWnd->GetSafeHwnd(), (LPPOINT)rect);	// Преобразование координат в клиентские
+			ScreenToClient(pWnd->GetSafeHwnd(), (LPPOINT)rect);
 
 			// Установка новых размеров
 			rect->right = rect->left + resizedFrame.cols;
@@ -385,9 +385,8 @@ void COpenCvWithMFCDlg::OnBnClickedButtonStart()
 		return;
 	}
 	
-
 	stopThread = false;
-	AfxBeginThread(CameraCaptureThread, this); // Запускаем поток
+	AfxBeginThread(CameraCaptureThread, this);
 }
 
 
@@ -467,6 +466,6 @@ void COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameHeight()
 
 void COpenCvWithMFCDlg::OnBnClickedButtonOpenDialog()
 {
-	TestDialog* dlg = new TestDialog();
-	dlg->DoModal();
+	TestDialog dlg;
+	dlg.DoModal();
 }
