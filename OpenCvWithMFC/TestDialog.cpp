@@ -116,7 +116,8 @@ TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 	, m_DrawFrame(NULL)
 	, m_StopThread(false)
 	, m_IsDrawing(false)
-	, m_MousePointerCoord(_T("MOUSE COORDS"))
+	, m_VideoThread(NULL)
+	, m_CursorChildCoord(_T("MOUSE COORDS"))
 {
 	  InitializeCriticalSection(&m_CriticalSection);
 }
@@ -124,11 +125,10 @@ TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 TestDialog::~TestDialog()
 {
 	m_StopThread = true;
-
+	
 	WaitForSingleObject(m_VideoThread->m_hThread, INFINITE);
 
-	//cv::destroyWindow(OPEN_CV_WINDOW_NAME);
-	cv::destroyAllWindows();
+	cv::destroyWindow(OPEN_CV_WINDOW_NAME);
 
 	if (m_Capture) 
 	{
@@ -153,7 +153,7 @@ TestDialog::~TestDialog()
 void TestDialog::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
-	DDX_Text(pDX, IDC_STATIC_MOUSE_COORDS, m_MousePointerCoord);
+	DDX_Text(pDX, IDC_STATIC_MOUSE_COORDS, m_CursorChildCoord);
 }
 
 BOOL TestDialog::OnInitDialog()
@@ -162,6 +162,7 @@ BOOL TestDialog::OnInitDialog()
 
 	int newX = 0; 
 	int newY = 0;
+
 	RECT tempRect;
 	GetWindowRect(&tempRect);
 
@@ -177,7 +178,7 @@ BOOL TestDialog::OnInitDialog()
 
 	if (!m_Capture->isOpened()) 
 	{
-		AfxMessageBox(L"Failed to open camera!");
+		AfxMessageBox(L"Не удалось открыть камеру!");
 		return FALSE;
 	}
 
@@ -204,6 +205,12 @@ BOOL TestDialog::OnInitDialog()
 	cv::setMouseCallback(OPEN_CV_WINDOW_NAME, MouseCallback, this);
 
 	m_VideoThread = AfxBeginThread(VideoThread, this);
+
+	if (m_VideoThread == NULL)
+	{
+		MessageBox(_T("Не удалось создать поток!"));
+		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -237,6 +244,7 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		}	
 
 		EnterCriticalSection(&dlg->m_CriticalSection);
+
 		dlg->safeCloneFrame(frame, dlg->m_CurrentFrame);
 
 		if (!dlg->m_IsDrawing) 
@@ -249,12 +257,12 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 			cv::imshow(OPEN_CV_WINDOW_NAME, *(dlg->m_DrawFrame));
 		}
 
-		LeaveCriticalSection(&dlg->m_CriticalSection);
-
 		if (cv::waitKey(1) == 27) 
 		{
 			dlg->m_StopThread = true;
 		}
+
+		LeaveCriticalSection(&dlg->m_CriticalSection);
 	}
 
 	return 0;
@@ -269,7 +277,7 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 	case cv::EVENT_LBUTTONDOWN:
 		dlg->m_IsDrawing = true;
 		dlg->m_StartPoint = cv::Point(x, y);
-		dlg->SetMouseCoords(x, y);
+		dlg->SetCursorCoords(x, y);
 		break;
 
 	case cv::EVENT_MOUSEMOVE:
@@ -284,7 +292,7 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 				dlg->m_EndPoint = cv::Point(x, y);
 				cv::rectangle(*(dlg->m_DrawFrame), dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
 
-				dlg->SetMouseCoords(x, y);
+				dlg->SetCursorCoords(x, y);
 			}
 
 			LeaveCriticalSection(&dlg->m_CriticalSection);
@@ -303,7 +311,7 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 			dlg->m_EndPoint = cv::Point(x, y);
 			cv::rectangle(*(dlg->m_DrawFrame), dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
 
-			dlg->SetMouseCoords(x, y);
+			dlg->SetCursorCoords(x, y);
 		}
 
 		LeaveCriticalSection(&dlg->m_CriticalSection);
@@ -316,15 +324,16 @@ void TestDialog::safeCloneFrame(cv::Mat& source, cv::Mat*& destination)
 	if (destination) 
 	{
 		delete destination;
+		destination = nullptr;
 	}
 
 	destination = new cv::Mat(source.clone());
 }
 
-void TestDialog::SetMouseCoords(int x, int y)
+void TestDialog::SetCursorCoords(int x, int y)
 {
-	m_MousePointerCoord.Format(_TEXT("Mouse coord x: %d, y: %d"), x, y);
-	SetDlgItemText(IDC_STATIC_MOUSE_COORDS, m_MousePointerCoord);
+	m_CursorChildCoord.Format(_TEXT("Cursor coords: x: %d, y: %d"), x, y);
+	SetDlgItemText(IDC_STATIC_MOUSE_COORDS, m_CursorChildCoord);
 }
 
 void TestDialog::OnBnClickedButtonShowMessage()

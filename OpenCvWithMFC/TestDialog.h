@@ -45,8 +45,8 @@ private:
 public:
 	afx_msg void OnBnClickedButtonShowMessage();
 
-	void SetMouseCoords(int x, int y);
+	void SetCursorCoords(int x, int y);
 private:
 	//  оординаты указател€ мыши в дочернем окне
-	CString m_MousePointerCoord;
+	CString m_CursorChildCoord;
 };
