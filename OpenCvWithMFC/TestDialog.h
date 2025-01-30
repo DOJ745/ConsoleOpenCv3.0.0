@@ -26,7 +26,7 @@ protected:
 	virtual void OnDestroy();
 
 private:
-	cv::VideoCapture* m_Capture;        // Захват видео
+	cv::VideoCapture m_Capture;        // Захват видео
 	cv::Mat* m_CurrentFrame;            // Текущий кадр
 	cv::Mat* m_DrawFrame;               // Кадр с прямоугольником
 	CRITICAL_SECTION m_CriticalSection; // Критическая секция для синхронизации
