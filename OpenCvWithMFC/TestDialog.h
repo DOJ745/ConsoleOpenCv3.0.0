@@ -49,4 +49,6 @@ public:
 private:
 	//  оординаты указател€ мыши в дочернем окне
 	CString m_CursorChildCoord;
+public:
+	afx_msg void OnBnClickedButtonStopVideo();
 };

@@ -64,8 +64,8 @@ void AttachOpenCVWindowToMFC(HWND hwndParent)
 		int maxWidth = clientParentRect.right - clientParentRect.left;
 		int maxHeight = clientParentRect.bottom - clientParentRect.top;
 
-		int minWidth = 800;
-		int minHeight = 640;
+		int minWidth = 900;
+		int minHeight = 800;
 
 		int width = std::min(minWidth, maxWidth);
 		int height = std::min(minHeight, maxHeight);
@@ -126,17 +126,23 @@ TestDialog::~TestDialog()
 {
 	m_StopThread = true;
 	
-	WaitForSingleObject(m_VideoThread->m_hThread, INFINITE);
-
-	cv::destroyWindow(OPEN_CV_WINDOW_NAME);
-
-	if (m_Capture) 
+	if (m_VideoThread)
 	{
-		m_Capture->release();
+		WaitForSingleObject(m_VideoThread->m_hThread, INFINITE);
+	}
+
+	DeleteCriticalSection(&m_CriticalSection);
+
+	if (m_Capture)
+	{
+		if (m_Capture->isOpened()) 
+		{
+			m_Capture->release();
+		}
 	}
 
 	if (m_CurrentFrame) 
-	{
+	{	
 		delete m_CurrentFrame;
 		m_CurrentFrame = nullptr;
 	}
@@ -147,7 +153,7 @@ TestDialog::~TestDialog()
 		m_DrawFrame = nullptr;
 	}
 
-	DeleteCriticalSection(&m_CriticalSection);
+	cv::destroyWindow(OPEN_CV_WINDOW_NAME);
 }
 
 void TestDialog::DoDataExchange(CDataExchange* pDX)
@@ -179,6 +185,9 @@ BOOL TestDialog::OnInitDialog()
 	if (!m_Capture->isOpened()) 
 	{
 		AfxMessageBox(L"Не удалось открыть камеру!");
+
+		m_Capture->release();
+
 		return FALSE;
 	}
 
@@ -222,6 +231,7 @@ void TestDialog::OnDestroy()
 
 BEGIN_MESSAGE_MAP(TestDialog, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_SHOW_MESSAGE, &TestDialog::OnBnClickedButtonShowMessage)
+	ON_BN_CLICKED(IDC_BUTTON_STOP_VIDEO, &TestDialog::OnBnClickedButtonStopVideo)
 END_MESSAGE_MAP()
 
 
@@ -246,23 +256,26 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		EnterCriticalSection(&dlg->m_CriticalSection);
 
 		dlg->safeCloneFrame(frame, dlg->m_CurrentFrame);
+		//frame = dlg->m_CurrentFrame.clone();
 
 		if (!dlg->m_IsDrawing) 
 		{
 			dlg->safeCloneFrame(frame, dlg->m_DrawFrame);
+			//frame = dlg->m_DrawFrame.clone();
 		}
 
 		if (!dlg->m_DrawFrame->empty()) 
 		{
 			cv::imshow(OPEN_CV_WINDOW_NAME, *(dlg->m_DrawFrame));
-		}
-
-		if (cv::waitKey(1) == 27) 
-		{
-			dlg->m_StopThread = true;
+			//cv::imshow(OPEN_CV_WINDOW_NAME, dlg->m_DrawFrame);
 		}
 
 		LeaveCriticalSection(&dlg->m_CriticalSection);
+
+		//if (cv::waitKey(1) == 27) 
+		//{
+		//	dlg->m_StopThread = true;
+		//}
 	}
 
 	return 0;
@@ -285,9 +298,11 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 		{
 			EnterCriticalSection(&dlg->m_CriticalSection);
 
-			if (!dlg->m_CurrentFrame->empty()) 
+			if (!dlg->m_CurrentFrame->empty())
+			//if (!dlg->m_CurrentFrame.empty()) 
 			{
 				dlg->safeCloneFrame(*(dlg->m_CurrentFrame), dlg->m_DrawFrame);
+				//dlg->m_CurrentFrame = dlg->m_DrawFrame.clone();
 				setPointInImage(dlg->m_DrawFrame->cols, dlg->m_DrawFrame->rows, x, y);
 				dlg->m_EndPoint = cv::Point(x, y);
 				cv::rectangle(*(dlg->m_DrawFrame), dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
@@ -304,9 +319,11 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 
 		EnterCriticalSection(&dlg->m_CriticalSection);
 
-		if (!dlg->m_CurrentFrame->empty()) 
+		if (!dlg->m_CurrentFrame->empty())
+		//if (!dlg->m_CurrentFrame.empty()) 
 		{
 			dlg->safeCloneFrame(*(dlg->m_CurrentFrame), dlg->m_DrawFrame);
+			//dlg->m_CurrentFrame = dlg->m_DrawFrame->clone();
 			setPointInImage(dlg->m_DrawFrame->cols, dlg->m_DrawFrame->rows, x, y);
 			dlg->m_EndPoint = cv::Point(x, y);
 			cv::rectangle(*(dlg->m_DrawFrame), dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
@@ -321,13 +338,19 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 
 void TestDialog::safeCloneFrame(cv::Mat& source, cv::Mat*& destination) 
 {
-	if (destination) 
+	cv::Mat cloned = source.clone();
+
+	if (cloned.empty())
 	{
-		delete destination;
-		destination = nullptr;
+		return;
 	}
 
-	destination = new cv::Mat(source.clone());
+	if (destination)
+	{
+		delete destination;
+	}
+
+	destination = new cv::Mat(cloned);
 }
 
 void TestDialog::SetCursorCoords(int x, int y)
@@ -339,4 +362,9 @@ void TestDialog::SetCursorCoords(int x, int y)
 void TestDialog::OnBnClickedButtonShowMessage()
 {
 	MessageBox(_T("Тестовое сообщение"));
+}
+
+void TestDialog::OnBnClickedButtonStopVideo()
+{
+	m_Capture->release();
 }
