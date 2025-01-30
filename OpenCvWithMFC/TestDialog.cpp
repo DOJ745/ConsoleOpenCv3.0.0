@@ -34,8 +34,9 @@ void setPointInImage(const int width, const int height, int& x, int& y)
 // Функция для привязки окна OpenCV к области MFC
 void AttachOpenCVWindowToMFC(HWND hwndParent)
 {	
-	//cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_AUTOSIZE);
 	cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_NORMAL);
+	//cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_AUTOSIZE);
+	//cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_FREERATIO);
 
 	RECT clientParentRect;      // Размеры клиентской области окна MFC
 	POINT clientOffsetTopLeft;	// Смещение клиентской области относительно окна
@@ -64,8 +65,8 @@ void AttachOpenCVWindowToMFC(HWND hwndParent)
 		int maxWidth = clientParentRect.right - clientParentRect.left;
 		int maxHeight = clientParentRect.bottom - clientParentRect.top;
 
-		int minWidth = 900;
-		int minHeight = 800;
+		int minWidth = 1280;
+		int minHeight = 1024;
 
 		int width = std::min(minWidth, maxWidth);
 		int height = std::min(minHeight, maxHeight);
@@ -112,8 +113,8 @@ IMPLEMENT_DYNAMIC(TestDialog, CDialogEx)
 TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 	: CDialogEx(TestDialog::IDD, pParent)
 	, m_Capture(NULL)
-	, m_CurrentFrame(new cv::Mat())
-	, m_DrawFrame(new cv::Mat())
+	, m_CurrentFrame()
+	, m_DrawFrame()
 	, m_StopThread(false)
 	, m_IsDrawing(false)
 	, m_VideoThread(NULL)
@@ -132,26 +133,6 @@ TestDialog::~TestDialog()
 	}
 
 	DeleteCriticalSection(&m_CriticalSection);
-
-	//if (m_Capture)
-	//{
-	//	if (m_Capture->isOpened()) 
-	//	{
-	//		m_Capture->release();
-	//	}
-	//}
-
-	if (m_CurrentFrame) 
-	{	
-		delete m_CurrentFrame;
-		m_CurrentFrame = nullptr;
-	}
-
-	if (m_DrawFrame) 
-	{
-		delete m_DrawFrame;
-		m_DrawFrame = nullptr;
-	}
 
 	cv::destroyWindow(OPEN_CV_WINDOW_NAME);
 }
@@ -206,9 +187,6 @@ BOOL TestDialog::OnInitDialog()
 		return FALSE;
 	}
 
-	//m_CurrentFrame = new cv::Mat();
-	//m_DrawFrame = new cv::Mat();
-
 	AttachOpenCVWindowToMFC(GetSafeHwnd());
 
 	cv::setMouseCallback(OPEN_CV_WINDOW_NAME, MouseCallback, this);
@@ -255,16 +233,16 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 
 		EnterCriticalSection(&dlg->m_CriticalSection);
 
-		dlg->safeCloneFrame(frame, dlg->m_CurrentFrame);
+		dlg->CloneFrame(frame, dlg->m_CurrentFrame);
 
 		if (!dlg->m_IsDrawing) 
 		{
-			dlg->safeCloneFrame(frame, dlg->m_DrawFrame);
+			dlg->CloneFrame(frame, dlg->m_DrawFrame);
 		}
 
-		if (!dlg->m_DrawFrame->empty()) 
+		if (!dlg->m_DrawFrame.empty()) 
 		{
-			cv::imshow(OPEN_CV_WINDOW_NAME, *(dlg->m_DrawFrame));
+			cv::imshow(OPEN_CV_WINDOW_NAME, dlg->m_DrawFrame);
 		}
 
 		LeaveCriticalSection(&dlg->m_CriticalSection);
@@ -295,12 +273,12 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 		{
 			EnterCriticalSection(&dlg->m_CriticalSection);
 
-			if (!dlg->m_CurrentFrame->empty())
+			if (!dlg->m_CurrentFrame.empty())
 			{
-				dlg->safeCloneFrame(*(dlg->m_CurrentFrame), dlg->m_DrawFrame);
-				setPointInImage(dlg->m_DrawFrame->cols, dlg->m_DrawFrame->rows, x, y);
+				dlg->CloneFrame(dlg->m_CurrentFrame, dlg->m_DrawFrame);
+				setPointInImage(dlg->m_DrawFrame.cols, dlg->m_DrawFrame.rows, x, y);
 				dlg->m_EndPoint = cv::Point(x, y);
-				cv::rectangle(*(dlg->m_DrawFrame), dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
+				cv::rectangle(dlg->m_DrawFrame, dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
 
 				dlg->SetCursorCoords(x, y);
 			}
@@ -314,12 +292,12 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 
 		EnterCriticalSection(&dlg->m_CriticalSection);
 
-		if (!dlg->m_CurrentFrame->empty())
+		if (!dlg->m_CurrentFrame.empty())
 		{
-			dlg->safeCloneFrame(*(dlg->m_CurrentFrame), dlg->m_DrawFrame);
-			setPointInImage(dlg->m_DrawFrame->cols, dlg->m_DrawFrame->rows, x, y);
+			dlg->CloneFrame(dlg->m_CurrentFrame, dlg->m_DrawFrame);
+			setPointInImage(dlg->m_DrawFrame.cols, dlg->m_DrawFrame.rows, x, y);
 			dlg->m_EndPoint = cv::Point(x, y);
-			cv::rectangle(*(dlg->m_DrawFrame), dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
+			cv::rectangle(dlg->m_DrawFrame, dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
 
 			dlg->SetCursorCoords(x, y);
 		}
@@ -329,27 +307,10 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 	}
 }
 
-void TestDialog::safeCloneFrame(cv::Mat& source, cv::Mat*& destination) 
+void TestDialog::CloneFrame(const cv::Mat& source, cv::Mat& destination)
 {
-	cv::Mat cloned = source.clone();
-
-	if (cloned.empty())
-	{
-		return;
-	}
-
-	if (destination)
-	{
-		delete destination;
-	}
-
-	destination = new cv::Mat(cloned);
+	destination = source.clone();
 }
-
-//void TestDialog::safeCloneFrame(const cv::Mat& source, cv::Mat& destination) 
-//{
-//	destination = source.clone();  // Клонируем напрямую в объект
-//}
 
 void TestDialog::SetCursorCoords(int x, int y)
 {

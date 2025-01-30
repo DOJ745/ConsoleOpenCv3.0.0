@@ -26,9 +26,9 @@ protected:
 	virtual void OnDestroy();
 
 private:
-	cv::VideoCapture m_Capture;        // Захват видео
-	cv::Mat* m_CurrentFrame;            // Текущий кадр
-	cv::Mat* m_DrawFrame;               // Кадр с прямоугольником
+	cv::VideoCapture m_Capture;			// Захват видео
+	cv::Mat m_CurrentFrame;				// Текущий кадр
+	cv::Mat m_DrawFrame;				// Кадр с прямоугольником
 	CRITICAL_SECTION m_CriticalSection; // Критическая секция для синхронизации
 	volatile bool m_StopThread;         // Флаг завершения потока
 	volatile bool m_IsDrawing;          // Флаг рисования прямоугольника
@@ -39,7 +39,7 @@ private:
 	static UINT VideoThread(LPVOID pParam);
 	static void MouseCallback(int event, int x, int y, int flags, void* userdata);
 
-	void safeCloneFrame(cv::Mat& source, cv::Mat*& destination);
+	void CloneFrame(const cv::Mat& source, cv::Mat& destination);
 
 	DECLARE_MESSAGE_MAP()
 public:
