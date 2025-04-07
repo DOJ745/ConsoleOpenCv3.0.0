@@ -43,6 +43,11 @@ public:
 	int m_KernelSize1;
 	int m_KernelSize2;
 
+	// CLAHE filter parameters
+	double m_ClaheClipLimit;
+	int m_ClaheWidth;
+	int m_ClaheHeight;
+
 	afx_msg void OnEnUpdateEditCannyThreshold1();
 	afx_msg void OnEnUpdateEditCannyThreshold2();
 	afx_msg void OnEnUpdateEditGaussianKernelSize1();
@@ -56,4 +61,9 @@ public:
 	afx_msg void OnEnUpdateEditResizeFrameWidth();
 	afx_msg void OnEnUpdateEditResizeFrameHeight();
 	afx_msg void OnBnClickedButtonOpenDialog();
+	afx_msg void OnEnUpdateEditClaheClipLimit();
+	afx_msg void OnEnUpdateEditClaheWidth();
+	afx_msg void OnEnUpdateEditClaheHeight();
+	int m_testDDXInt;
+	afx_msg void OnEnKillfocusEdit15();
 };

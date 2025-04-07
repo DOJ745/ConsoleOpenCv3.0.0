@@ -104,6 +104,11 @@ UINT CameraCaptureThread(LPVOID pParam)
 
 		CAP >> FRAME;
 
+		if (FRAME.empty())
+		{
+			continue;
+		}
+
 		double scaleWidth = static_cast<double>(targetSize.width) / FRAME.cols;
 		double scaleHeight = static_cast<double>(targetSize.height) / FRAME.rows;
 		double scale = std::min(scaleWidth, scaleHeight);
@@ -115,47 +120,66 @@ UINT CameraCaptureThread(LPVOID pParam)
 		cv::resize(FRAME, resizedFrame, cv::Size(newWidth, newHeight), 0, 0, cv::INTER_LINEAR);
 
 		// Создаем рамку (letterbox)
-		cv::Mat outputFrame(targetSize, FRAME.type(), cv::Scalar(0, 255, 255));
+		cv::Mat letterboxFrame(targetSize, FRAME.type(), cv::Scalar(0, 255, 255));
 		int xOffset = (targetSize.width - newWidth) / 2;
 		int yOffset = (targetSize.height - newHeight) / 2;
 
 		// Вставляем масштабированное изображение в центр области
-		resizedFrame.copyTo(outputFrame(cv::Rect(xOffset, yOffset, newWidth, newHeight)));
-
-		resizedFrame = outputFrame;
-		
-		if (FRAME.empty())
-		{
-			continue;
-		}
+		resizedFrame.copyTo(letterboxFrame(cv::Rect(xOffset, yOffset, newWidth, newHeight)));
 
 		// Обработка изображения
-		cv::cvtColor(resizedFrame, EDGES, cv::COLOR_BGR2GRAY);
+		// 1. Удаление шумов
+		// 2. Выделение границ
+		// 3. Коррекция яркости и контраста
+		// 4. Нормализация (градации серого)
+
+		cv::Mat gray, edges;
+		cv::cvtColor(letterboxFrame, gray, cv::COLOR_BGR2GRAY);
+
+		// CLAHE до размытия
+		int tempLimit = dlg->m_ClaheClipLimit;
+		cv::Size tempSize(dlg->m_ClaheWidth, dlg->m_ClaheHeight);
+		cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(tempLimit, tempSize);
+		clahe->apply(gray, gray);
+
+		cv::Size kernelSize(dlg->m_KernelSize1 | 1, dlg->m_KernelSize2 | 1);
+		cv::GaussianBlur(gray, edges, kernelSize, 1.5, 1.5);
+
+		cv::Canny(edges, edges, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
+
+		/*cv::cvtColor(letterboxFrame, EDGES, cv::COLOR_BGR2GRAY);
 		cv::GaussianBlur(EDGES, EDGES, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
+		cv::Canny(EDGES, EDGES, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2)*/;
+
+		//cv::Ptr<cv::CLAHE> tempCLAHE = cv::createCLAHE(2.0, cv::Size(8, 8));
+		//tempCLAHE->apply(EDGES, EDGES);
+		
+	/*	cv::GaussianBlur(resizedFrame, EDGES, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
 		cv::Canny(EDGES, EDGES, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
+		cv::cvtColor(EDGES, EDGES, cv::COLOR_BGR2GRAY);*/
 
-		// Рисование перекрестья
-		const int lineOffset = 45;
-		int centerX = resizedFrame.cols / 2;	// FRAME
-		int centerY = resizedFrame.rows / 2;	// FRAME
-		cv::Scalar crossColor(0, 0, 255);		// Цвет перекрестья: красный (BGR)
-		int thickness = 2;
+		//// Рисование перекрестья
+		//const int lineOffset = 45;
+		//int centerX = letterboxFrame.cols / 2;
+		//int centerY = letterboxFrame.rows / 2;
+		//cv::Scalar crossColor(0, 0, 255);		// Цвет перекрестья: красный (BGR)
+		//int thickness = 2;
 
-		// Горизонтальная линия
-		cv::line(
-			resizedFrame // FRAME
-			, cv::Point(lineOffset, centerY)
-			, cv::Point(resizedFrame.cols - lineOffset, centerY)
-			, crossColor
-			, thickness);	
+		//// Горизонтальная линия
+		//cv::line(
+		//	letterboxFrame
+		//	, cv::Point(lineOffset, centerY)
+		//	, cv::Point(letterboxFrame.cols - lineOffset, centerY)
+		//	, crossColor
+		//	, thickness);	
 
-		// Вертикальная линия
-		cv::line(
-			resizedFrame // FRAME
-			, cv::Point(centerX, lineOffset)
-			, cv::Point(centerX, resizedFrame.rows - lineOffset)
-			, crossColor
-			, thickness);	
+		//// Вертикальная линия
+		//cv::line(
+		//	letterboxFrame
+		//	, cv::Point(centerX, lineOffset)
+		//	, cv::Point(centerX, letterboxFrame.rows - lineOffset)
+		//	, crossColor
+		//	, thickness);	
 
 		// Изменение размеров PictureControl под отмасштабированный кадр
 		CRect* rect = new CRect();
@@ -167,8 +191,8 @@ UINT CameraCaptureThread(LPVOID pParam)
 			ScreenToClient(pWnd->GetSafeHwnd(), (LPPOINT)rect);
 
 			// Установка новых размеров
-			rect->right = rect->left + resizedFrame.cols;
-			rect->bottom = rect->top + resizedFrame.rows;
+			rect->right = rect->left + letterboxFrame.cols;
+			rect->bottom = rect->top + letterboxFrame.rows;
 			pWnd->MoveWindow(rect);
 		}
 
@@ -176,7 +200,7 @@ UINT CameraCaptureThread(LPVOID pParam)
 
 		cv::setMouseCallback("", onMouse);
 
-		DrawFrameToPictureControl(dlg, EDGES); // FRAME
+		DrawFrameToPictureControl(dlg, edges);
 	}
 
 	return 0;
@@ -224,6 +248,10 @@ COpenCvWithMFCDlg::COpenCvWithMFCDlg(CWnd* pParent /*=NULL*/)
 	, m_KernelSize2(7)
 	, m_ResizeFrameWidth(800)
 	, m_ResizeFrameHeight(600)
+	, m_ClaheClipLimit(2)
+	, m_ClaheWidth(8)
+	, m_ClaheHeight(8)
+	, m_testDDXInt(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -243,6 +271,14 @@ void COpenCvWithMFCDlg::DoDataExchange(CDataExchange* pDX)
 	DDV_MinMaxInt(pDX, m_ResizeFrameWidth, 640, 1920);
 	DDX_Text(pDX, IDC_EDIT_RESIZE_FRAME_HEIGHT, m_ResizeFrameHeight);
 	DDV_MinMaxInt(pDX, m_ResizeFrameHeight, 480, 1080);
+	DDX_Text(pDX, IDC_EDIT_CLAHE_CLIP_LIMIT, m_ClaheClipLimit);
+	DDV_MinMaxDouble(pDX, m_ClaheClipLimit, 1, 40);
+	DDX_Text(pDX, IDC_EDIT_CLAHE_WIDTH, m_ClaheWidth);
+	DDV_MinMaxInt(pDX, m_ClaheWidth, 1, 100);
+	DDX_Text(pDX, IDC_EDIT_CLAHE_HEIGHT, m_ClaheHeight);
+	DDV_MinMaxInt(pDX, m_ClaheHeight, 1, 100);
+	DDX_Text(pDX, IDC_EDIT15, m_testDDXInt);
+	DDV_MinMaxInt(pDX, m_testDDXInt, 1, 10);
 }
 
 BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
@@ -262,6 +298,10 @@ BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
 	ON_EN_UPDATE(IDC_EDIT_RESIZE_FRAME_WIDTH, &COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameWidth)
 	ON_EN_UPDATE(IDC_EDIT_RESIZE_FRAME_HEIGHT, &COpenCvWithMFCDlg::OnEnUpdateEditResizeFrameHeight)
 	ON_BN_CLICKED(IDC_BUTTON_OPEN_DIALOG, &COpenCvWithMFCDlg::OnBnClickedButtonOpenDialog)
+	ON_EN_UPDATE(IDC_EDIT_CLAHE_CLIP_LIMIT, &COpenCvWithMFCDlg::OnEnUpdateEditClaheClipLimit)
+	ON_EN_UPDATE(IDC_EDIT_CLAHE_WIDTH, &COpenCvWithMFCDlg::OnEnUpdateEditClaheWidth)
+	ON_EN_UPDATE(IDC_EDIT_CLAHE_HEIGHT, &COpenCvWithMFCDlg::OnEnUpdateEditClaheHeight)
+	ON_EN_KILLFOCUS(IDC_EDIT15, &COpenCvWithMFCDlg::OnEnKillfocusEdit15)
 END_MESSAGE_MAP()
 
 
@@ -304,6 +344,10 @@ BOOL COpenCvWithMFCDlg::OnInitDialog()
 	SetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2, m_KernelSize2);
 	SetDlgItemInt(IDC_EDIT_RESIZE_FRAME_WIDTH, m_ResizeFrameWidth);
 	SetDlgItemInt(IDC_EDIT_RESIZE_FRAME_HEIGHT, m_ResizeFrameHeight);
+	SetDlgItemInt(IDC_EDIT_CLAHE_CLIP_LIMIT, m_ClaheClipLimit);
+	SetDlgItemInt(IDC_EDIT_CLAHE_WIDTH, m_ClaheWidth);
+	SetDlgItemInt(IDC_EDIT_CLAHE_HEIGHT, m_ClaheHeight);
+	SetDlgItemInt(IDC_EDIT15, 5);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -413,28 +457,24 @@ afx_msg LRESULT COpenCvWithMFCDlg::OnUpdatePicture(WPARAM wParam, LPARAM lParam)
 void COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold1()
 {
 	m_CannyThreshold1 = GetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_1);
-	//UpdateData(FALSE);
 }
 
 
 void COpenCvWithMFCDlg::OnEnUpdateEditCannyThreshold2()
 {
 	m_CannyThreshold2 = GetDlgItemInt(IDC_EDIT_CANNY_THRESHOLD_2);
-	//UpdateData(FALSE);
 }
 
 
 void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize1()
 {
 	m_KernelSize1 = (GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1) % 2 != 0) ? GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_1) : 1;
-	//UpdateData(FALSE);
 }
 
 
 void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2()
 {
 	m_KernelSize2 = (GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) % 2 != 0) ? GetDlgItemInt(IDC_EDIT_GAUSSIAN_KERNEL_SIZE_2) : 1;
-	//UpdateData(FALSE);
 }
 
 
@@ -449,7 +489,7 @@ void COpenCvWithMFCDlg::OnBnClickedButtonSavePicture()
 
 void COpenCvWithMFCDlg::OnBnClickedButtonCompareFrame()
 {
-	// TODO: Add your control notification handler code here
+	// TODO: compare with ethalon
 }
 
 
@@ -468,4 +508,27 @@ void COpenCvWithMFCDlg::OnBnClickedButtonOpenDialog()
 {
 	TestDialog dlg;
 	dlg.DoModal();
+}
+
+void COpenCvWithMFCDlg::OnEnUpdateEditClaheClipLimit()
+{
+	m_ClaheClipLimit = GetDlgItemInt(IDC_EDIT_CLAHE_CLIP_LIMIT);
+}
+
+
+void COpenCvWithMFCDlg::OnEnUpdateEditClaheWidth()
+{
+	m_ClaheWidth = GetDlgItemInt(IDC_EDIT_CLAHE_WIDTH);
+}
+
+
+void COpenCvWithMFCDlg::OnEnUpdateEditClaheHeight()
+{
+	m_ClaheHeight = GetDlgItemInt(IDC_EDIT_CLAHE_HEIGHT);
+}
+
+// По умолчанию проверка на значение работате по нажатию на Enter. Для запуска события необходимо запустить UpdateData(TRUE) 
+void COpenCvWithMFCDlg::OnEnKillfocusEdit15()
+{
+	UpdateData(TRUE);
 }
