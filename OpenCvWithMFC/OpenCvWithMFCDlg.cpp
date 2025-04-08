@@ -19,22 +19,14 @@
 cv::VideoCapture CAP; // Глобальный объект захвата камеры
 cv::Mat FRAME;		  // Исходный кадр камеры
 cv::Mat EDGES;		  // Обработанный кадр камеры
+cv::Mat SAVED_FRAME;
 
 const char* COMPARE_IMG = "compare.jpg";
+const char* ETHALON_IMG = "ethalon.jpg";
+
 UINT_PTR TIMER_ID = 1;
 UINT TIMER_INTERVAL_MS = 1;
 volatile bool stopThread = false; // Флаг для остановки потока
-
-void onMouse(int event, int x, int y, int, void*)
-{
-	switch (event)
-	{
-	case cv::EVENT_LBUTTONDOWN:
-		cv::Point startPoint(x, y);
-		cv::circle(EDGES, startPoint, 5, cv::Scalar(0, 255, 0), -1);
-		break;
-	}
-}
 
 void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 {
@@ -43,7 +35,7 @@ void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 		return;
 	}
 
-	CWnd* pPictureCtrl = pWnd->GetDlgItem(IDC_PICTURE_CONTROL);
+	CWnd* pPictureCtrl = pWnd->GetDlgItem(IDC_PICTURE_CONTROL_CAMERA);
 
 	if (!pPictureCtrl)
 	{
@@ -109,13 +101,16 @@ UINT CameraCaptureThread(LPVOID pParam)
 			continue;
 		}
 
-		double scaleWidth = static_cast<double>(targetSize.width) / FRAME.cols;
-		double scaleHeight = static_cast<double>(targetSize.height) / FRAME.rows;
+		int frameWidth = FRAME.cols;
+		int frameHeight = FRAME.rows; 
+
+		double scaleWidth = static_cast<double>(targetSize.width) / frameWidth;
+		double scaleHeight = static_cast<double>(targetSize.height) / frameHeight;
 		double scale = std::min(scaleWidth, scaleHeight);
 
 		// Новый размер изображения с сохранением пропорций
-		int newWidth = static_cast<int>(FRAME.cols * scale);
-		int newHeight = static_cast<int>(FRAME.rows * scale);
+		int newWidth = static_cast<int>(frameWidth * scale);
+		int newHeight = static_cast<int>(frameHeight * scale);
 
 		cv::resize(FRAME, resizedFrame, cv::Size(newWidth, newHeight), 0, 0, cv::INTER_LINEAR);
 
@@ -133,30 +128,32 @@ UINT CameraCaptureThread(LPVOID pParam)
 		// 3. Коррекция яркости и контраста
 		// 4. Нормализация (градации серого)
 
-		cv::Mat gray, edges;
-		cv::cvtColor(letterboxFrame, gray, cv::COLOR_BGR2GRAY);
+		cv::Mat gray; 
+		cv::Mat finalFiltered;
 
-		// CLAHE до размытия
-		int tempLimit = dlg->m_ClaheClipLimit;
-		cv::Size tempSize(dlg->m_ClaheWidth, dlg->m_ClaheHeight);
-		cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(tempLimit, tempSize);
-		clahe->apply(gray, gray);
+		cv::cvtColor(letterboxFrame, finalFiltered, cv::COLOR_BGR2GRAY);
 
-		cv::Size kernelSize(dlg->m_KernelSize1 | 1, dlg->m_KernelSize2 | 1);
-		cv::GaussianBlur(gray, edges, kernelSize, 1.5, 1.5);
+		if (dlg->m_applyClahe)
+		{
+			// CLAHE до размытия
+			int tempLimit = dlg->m_ClaheClipLimit;
+			cv::Size tempSize(dlg->m_ClaheWidth, dlg->m_ClaheHeight);
+			cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(tempLimit, tempSize);
+			clahe->apply(finalFiltered, finalFiltered);
 
-		cv::Canny(edges, edges, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
+			clahe->clear();
+		}
 
-		/*cv::cvtColor(letterboxFrame, EDGES, cv::COLOR_BGR2GRAY);
-		cv::GaussianBlur(EDGES, EDGES, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
-		cv::Canny(EDGES, EDGES, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2)*/;
+		if (dlg->m_applyGaussian)
+		{
+			cv::Size kernelSize(dlg->m_KernelSize1 | 1, dlg->m_KernelSize2 | 1);
+			cv::GaussianBlur(finalFiltered, finalFiltered, kernelSize, 1.5, 1.5);
+		}
 
-		//cv::Ptr<cv::CLAHE> tempCLAHE = cv::createCLAHE(2.0, cv::Size(8, 8));
-		//tempCLAHE->apply(EDGES, EDGES);
-		
-	/*	cv::GaussianBlur(resizedFrame, EDGES, cv::Size(dlg->m_KernelSize1, dlg->m_KernelSize2), 1.5, 1.5);
-		cv::Canny(EDGES, EDGES, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
-		cv::cvtColor(EDGES, EDGES, cv::COLOR_BGR2GRAY);*/
+		if (dlg->m_applyCanny)
+		{
+			cv::Canny(finalFiltered, finalFiltered, dlg->m_CannyThreshold1, dlg->m_CannyThreshold2);
+		}
 
 		//// Рисование перекрестья
 		//const int lineOffset = 45;
@@ -183,7 +180,7 @@ UINT CameraCaptureThread(LPVOID pParam)
 
 		// Изменение размеров PictureControl под отмасштабированный кадр
 		CRect* rect = new CRect();
-		CWnd* pWnd = dlg->GetDlgItem(IDC_PICTURE_CONTROL);
+		CWnd* pWnd = dlg->GetDlgItem(IDC_PICTURE_CONTROL_CAMERA);
 
 		if (pWnd)
 		{
@@ -197,10 +194,11 @@ UINT CameraCaptureThread(LPVOID pParam)
 		}
 
 		delete rect;
+		rect = nullptr;
 
-		cv::setMouseCallback("", onMouse);
+		SAVED_FRAME = finalFiltered;
 
-		DrawFrameToPictureControl(dlg, edges);
+		DrawFrameToPictureControl(dlg, finalFiltered);
 	}
 
 	return 0;
@@ -252,6 +250,9 @@ COpenCvWithMFCDlg::COpenCvWithMFCDlg(CWnd* pParent /*=NULL*/)
 	, m_ClaheWidth(8)
 	, m_ClaheHeight(8)
 	, m_testDDXInt(0)
+	, m_applyCanny(FALSE)
+	, m_applyGaussian(FALSE)
+	, m_applyClahe(FALSE)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -279,6 +280,11 @@ void COpenCvWithMFCDlg::DoDataExchange(CDataExchange* pDX)
 	DDV_MinMaxInt(pDX, m_ClaheHeight, 1, 100);
 	DDX_Text(pDX, IDC_EDIT15, m_testDDXInt);
 	DDV_MinMaxInt(pDX, m_testDDXInt, 1, 10);
+	DDX_Check(pDX, IDC_CHECK_APPLY_CANNY, m_applyCanny);
+	DDX_Check(pDX, IDC_CHECK_APPLY_GAUSSIAN, m_applyGaussian);
+	DDX_Check(pDX, IDC_CHECK_APPLY_CLAHE, m_applyClahe);
+
+	DDX_Control(pDX, IDC_PICTURE_CONTROL_CAMERA, m_cameraPictureControl);
 }
 
 BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
@@ -302,6 +308,10 @@ BEGIN_MESSAGE_MAP(COpenCvWithMFCDlg, CDialogEx)
 	ON_EN_UPDATE(IDC_EDIT_CLAHE_WIDTH, &COpenCvWithMFCDlg::OnEnUpdateEditClaheWidth)
 	ON_EN_UPDATE(IDC_EDIT_CLAHE_HEIGHT, &COpenCvWithMFCDlg::OnEnUpdateEditClaheHeight)
 	ON_EN_KILLFOCUS(IDC_EDIT15, &COpenCvWithMFCDlg::OnEnKillfocusEdit15)
+	ON_BN_CLICKED(IDC_CHECK_APPLY_CANNY, &COpenCvWithMFCDlg::OnBnClickedCheckApplyCanny)
+	ON_BN_CLICKED(IDC_CHECK_APPLY_GAUSSIAN, &COpenCvWithMFCDlg::OnBnClickedCheckApplyGaussian)
+	ON_BN_CLICKED(IDC_CHECK_APPLY_CLAHE, &COpenCvWithMFCDlg::OnBnClickedCheckApplyClahe)
+	ON_BN_CLICKED(IDC_BUTTON_CLEAR_PICTURE, &COpenCvWithMFCDlg::OnBnClickedButtonClearPicture)
 END_MESSAGE_MAP()
 
 
@@ -480,7 +490,7 @@ void COpenCvWithMFCDlg::OnEnUpdateEditGaussianKernelSize2()
 
 void COpenCvWithMFCDlg::OnBnClickedButtonSavePicture()
 {
-	if(cv::imwrite(COMPARE_IMG, FRAME))
+	if(cv::imwrite(COMPARE_IMG, SAVED_FRAME))
 	{
 		MessageBox(_T("Изображение сохранено!"), _T("Сохранение"));
 	}
@@ -490,6 +500,34 @@ void COpenCvWithMFCDlg::OnBnClickedButtonSavePicture()
 void COpenCvWithMFCDlg::OnBnClickedButtonCompareFrame()
 {
 	// TODO: compare with ethalon
+
+	int keypoints = 500;
+	float scaleFactor = 1.2f;
+	int pyramidLevels = 10;
+	int windowSize = 10;
+	int wtakPoints = 2;
+	int patchSize = 18;
+	int fastThreshold = 50;
+
+	cv::Ptr<cv::ORB> orb = cv::ORB::create(
+		        		500,			        // Максимальное количество ключевых точек
+		        		1.2f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
+		        		10,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
+		        		10,					    // Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
+		        		0,						// Первый уровень пирамиды
+		        		2,						// WTA_K - параметр определяет количество точек в окрестности ключевой точки, которые сравниваются для генерации одного бита дескриптора
+		        		cv::ORB::FAST_SCORE,	// Метод оценки
+		        		18,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
+		        		50						// Порог отклика -  это численная величина, характеризующая "выразительность" точки
+		        	);
+		    
+
+	cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
+	akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек
+	akaze->setNOctaves(4);                                  // Количество октав (уровней пирамиды)
+	akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве
+	akaze->setDescriptorSize(0);                            // Размер дескриптора (по умолчанию максимальный)
+	akaze->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);   // Тип дескриптора
 }
 
 
@@ -527,8 +565,35 @@ void COpenCvWithMFCDlg::OnEnUpdateEditClaheHeight()
 	m_ClaheHeight = GetDlgItemInt(IDC_EDIT_CLAHE_HEIGHT);
 }
 
-// По умолчанию проверка на значение работате по нажатию на Enter. Для запуска события необходимо запустить UpdateData(TRUE) 
+// По умолчанию проверка на значение работатет по нажатию на Enter. Для запуска события необходимо запустить UpdateData(TRUE) 
 void COpenCvWithMFCDlg::OnEnKillfocusEdit15()
 {
 	UpdateData(TRUE);
+}
+
+
+void COpenCvWithMFCDlg::OnBnClickedCheckApplyCanny()
+{
+	// TODO: Add your control notification handler code here
+	UpdateData(TRUE);
+}
+
+
+void COpenCvWithMFCDlg::OnBnClickedCheckApplyGaussian()
+{
+	// TODO: Add your control notification handler code here
+	UpdateData(TRUE);
+}
+
+
+void COpenCvWithMFCDlg::OnBnClickedCheckApplyClahe()
+{
+	// TODO: Add your control notification handler code here
+	UpdateData(TRUE);
+}
+
+
+void COpenCvWithMFCDlg::OnBnClickedButtonClearPicture()
+{
+	m_cameraPictureControl.ClearControl();
 }

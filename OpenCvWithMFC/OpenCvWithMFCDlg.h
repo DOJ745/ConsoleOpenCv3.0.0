@@ -3,7 +3,7 @@
 //
 
 #pragma once
-
+#include "CameraPictureControl.h"
 
 // COpenCvWithMFCDlg dialog
 class COpenCvWithMFCDlg : public CDialogEx
@@ -66,4 +66,16 @@ public:
 	afx_msg void OnEnUpdateEditClaheHeight();
 	int m_testDDXInt;
 	afx_msg void OnEnKillfocusEdit15();
+	BOOL m_applyCanny;
+	BOOL m_applyGaussian;
+	BOOL m_applyClahe;
+	afx_msg void OnBnClickedCheckApplyCanny();
+	afx_msg void OnBnClickedCheckApplyGaussian();
+	afx_msg void OnBnClickedCheckApplyClahe();
+
+private:
+	// Drawing area
+	CameraPictureControl m_cameraPictureControl;
+public:
+	afx_msg void OnBnClickedButtonClearPicture();
 };
