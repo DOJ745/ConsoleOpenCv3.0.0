@@ -50,7 +50,7 @@ void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
 
 	if (img.channels() == 1)
 	{
-		cv::cvtColor(img, bgrImage, cv::COLOR_GRAY2BGR);
+		cv::cvtColor(img, bgrImage, cv::COLOR_GRAY2RGB);
 	}
 	else
 	{

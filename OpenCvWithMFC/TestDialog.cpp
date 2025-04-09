@@ -6,6 +6,7 @@
 #include "TestDialog.h"
 #include "afxdialogex.h"
 
+// Space in name impacts the window... why?
 const std::string OPEN_CV_WINDOW_NAME = "OpenCV Window";
 
 void setPointInImage(const int width, const int height, int& x, int& y)
@@ -35,8 +36,6 @@ void setPointInImage(const int width, const int height, int& x, int& y)
 void AttachOpenCVWindowToMFC(HWND hwndParent)
 {	
 	cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_NORMAL);
-	//cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_AUTOSIZE);
-	//cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_FREERATIO);
 
 	RECT clientParentRect;      // Размеры клиентской области окна MFC
 	POINT clientOffsetTopLeft;	// Смещение клиентской области относительно окна
@@ -56,6 +55,7 @@ void AttachOpenCVWindowToMFC(HWND hwndParent)
 
 	if (parentHwndOpenCV != NULL)
 	{
+		// Скрываем окно OpenCV
 		::ShowWindow(parentHwndOpenCV, SW_HIDE);
 	}
 
@@ -93,6 +93,7 @@ void AttachOpenCVWindowToMFC(HWND hwndParent)
 		// Убираем заголовок и предотвращаем перемещение
 		LONG style = GetWindowLong(hwndOpenCV, GWL_STYLE);
 		style &= ~(WS_POPUP | WS_BORDER);
+		//style |= WS_CHILD | WS_VISIBLE;
 		::SetWindowLongPtr(hwndOpenCV, GWL_STYLE, style);
 
 		// Устанавливаем положение окна OpenCV относительно окна MFC
@@ -103,7 +104,38 @@ void AttachOpenCVWindowToMFC(HWND hwndParent)
 			, width
 			, height
 			, SWP_NOZORDER | SWP_FRAMECHANGED);
+	} 
+
+	/*cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_FREERATIO);
+	HWND hwndOpenCV = (HWND)cvGetWindowHandle(OPEN_CV_WINDOW_NAME.c_str());
+
+	// Получаем контейнер в диалоге
+	CWnd* pContainer = CWnd::FromHandle(hwndParent)->GetDlgItem(IDC_OPENCV_CONTAINER);
+
+	if (!pContainer || !hwndOpenCV) 
+	{
+		return;
 	}
+
+	// Устанавливаем как дочернее окно
+	::SetParent(hwndOpenCV, hwndParent);
+
+	// Настройка стилей
+	LONG style = ::GetWindowLong(hwndOpenCV, GWL_STYLE);
+	style &= ~(WS_POPUP | WS_BORDER);
+	style |= WS_CHILD | WS_VISIBLE;
+	::SetWindowLongPtr(hwndOpenCV, GWL_STYLE, style);
+
+	// Позиция и размеры
+	CRect rect;
+
+	pContainer->GetWindowRect(&rect);
+	::SetWindowPos(
+		hwndOpenCV, NULL, 
+		rect.left, rect.top, 
+		rect.Width(), rect.Height(),
+		SWP_NOZORDER | SWP_FRAMECHANGED
+		); */
 }
 
 // TestDialog dialog
@@ -134,7 +166,12 @@ TestDialog::~TestDialog()
 
 	DeleteCriticalSection(&m_CriticalSection);
 
-	cv::destroyWindow(OPEN_CV_WINDOW_NAME);
+	if (m_Capture.isOpened())
+	{
+		m_Capture.release();
+	}
+
+	cv::destroyAllWindows();
 }
 
 void TestDialog::DoDataExchange(CDataExchange* pDX)
@@ -192,7 +229,7 @@ BOOL TestDialog::OnInitDialog()
 	cv::setMouseCallback(OPEN_CV_WINDOW_NAME, MouseCallback, this);
 
 	m_VideoThread = AfxBeginThread(VideoThread, this);
-
+	
 	if (m_VideoThread == NULL)
 	{
 		MessageBox(_T("Не удалось создать поток!"));
@@ -204,6 +241,10 @@ BOOL TestDialog::OnInitDialog()
 
 void TestDialog::OnDestroy()
 {
+	if (m_Capture.isOpened())
+	{
+		m_Capture.release();
+	}
 	CDialogEx::OnDestroy();
 }
 
@@ -240,12 +281,17 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 			dlg->CloneFrame(frame, dlg->m_DrawFrame);
 		}
 
+		/*if (!dlg->m_DrawFrame.empty()) 
+		{
+			cv::imshow(OPEN_CV_WINDOW_NAME, dlg->m_DrawFrame);
+		} */
+
+		LeaveCriticalSection(&dlg->m_CriticalSection);
+
 		if (!dlg->m_DrawFrame.empty()) 
 		{
 			cv::imshow(OPEN_CV_WINDOW_NAME, dlg->m_DrawFrame);
 		}
-
-		LeaveCriticalSection(&dlg->m_CriticalSection);
 
 		//if (cv::waitKey(1) == 27) 
 		//{
@@ -295,6 +341,7 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 		if (!dlg->m_CurrentFrame.empty())
 		{
 			dlg->CloneFrame(dlg->m_CurrentFrame, dlg->m_DrawFrame);
+
 			setPointInImage(dlg->m_DrawFrame.cols, dlg->m_DrawFrame.rows, x, y);
 			dlg->m_EndPoint = cv::Point(x, y);
 			cv::rectangle(dlg->m_DrawFrame, dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
@@ -302,7 +349,13 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 			dlg->SetCursorCoords(x, y);
 		}
 
+		if (cv::imwrite("CelectedArea.jpg", dlg->m_DrawFrame))
+		{
+			AfxMessageBox(L"Image has been saved!", MB_OK | MB_ICONINFORMATION, NULL);
+		}
+
 		LeaveCriticalSection(&dlg->m_CriticalSection);
+
 		break;
 	}
 }
@@ -327,3 +380,30 @@ void TestDialog::OnBnClickedButtonStopVideo()
 {
 	m_Capture.release();
 }
+
+// FILTERS TO APPLY
+
+//cv::Mat gray; 
+//cv::Mat finalFiltered;
+
+//cv::cvtColor(dlg->m_CurrentFrame, finalFiltered, cv::COLOR_BGR2GRAY);
+
+//// CLAHE до размытия
+//int tempLimit = 2;
+//int tempWidth = 8;
+//int tempHeight = 8;
+//cv::Size tempSize(tempWidth, tempHeight);
+//cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(tempLimit, tempSize);
+//clahe->apply(finalFiltered, finalFiltered);
+
+//clahe->clear();
+
+//int tempKernelSize1 = 11;
+//int tempKernelSize2 = 11;
+//cv::Size kernelSize(tempKernelSize1 | 1, tempKernelSize2 | 1);
+//cv::GaussianBlur(finalFiltered, finalFiltered, kernelSize, 1.5, 1.5);
+
+
+//int tempCannyThreshold1 = 50;
+//int tempCannyThreshold2 = 90;
+//cv::Canny(finalFiltered, finalFiltered, tempCannyThreshold1, tempCannyThreshold2);
