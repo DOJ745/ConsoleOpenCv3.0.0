@@ -410,52 +410,57 @@
 //}
 
 // ===== Basic example =====
-//int _tmain(int argc, _TCHAR* argv[])
-//{
-//	std::cout << "Hello, world!\n";
-//
-//	cv::VideoCapture cap(0); // open the default camera
-//
-//	if(!cap.isOpened())		// check if we succeeded
-//	{
-//		return -1;
-//	}	
-//
-//	cv::Mat edges;
-//
-//	cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
-//	cap.set(cv::CAP_PROP_FRAME_HEIGHT, 960);
-//
-//	cv::Mat frame;
-//
-//	for(;;)
-//	{
-//		cap >> frame;		// get a new frame from camera
-//
-//		if (frame.empty()) 
-//		{
-//			std::cerr << "Failed to capture frame!" << std::endl;
-//			break;
-//		}
-//
-//		cv::cvtColor(frame, edges, cv::COLOR_BGR2GRAY);
-//		//cv::GaussianBlur(edges, edges, cv::Size(7,7), 1.5, 1.5, cv::BorderTypes::BORDER_DEFAULT);  // default parameters
-//		//cv::Canny(edges, edges, 0, 30, 3);														 // default parameters
-//
-//		cv::GaussianBlur(edges, edges, cv::Size(7,7), 1.5, 1.5, cv::BorderTypes::BORDER_DEFAULT); 
-//		cv::Canny(edges, edges, 50, 90, 3);
-//
-//		imshow("Camera edges", edges);
-//		imshow("Camera clear image", frame);
-//
-//		if (cv::waitKey(27) >= 0) 
-//		{
-//			break;
-//		}
-//	}
-//
-//	return 0;
-//}
+int _tmain(int argc, _TCHAR* argv[])
+{
+	std::cout << "Hello, world!\n";
+
+	cv::VideoCapture cap(0); // open the default camera
+
+	if(!cap.isOpened())		// check if we succeeded
+	{
+		return -1;
+	}	
+
+	cv::Mat edges;
+
+	const char* wndName = "OpenCV";
+	int width = 640;
+	int height = 480;
+
+	cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+	cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+
+	cv::Mat frame;
+
+	for(;;)
+	{
+		cap >> frame;		// get a new frame from camera
+
+		if (frame.empty()) 
+		{
+			std::cerr << "Failed to capture frame!" << std::endl;
+			break;
+		}
+
+		cv::cvtColor(frame, edges, cv::COLOR_BGR2GRAY);
+		//cv::GaussianBlur(edges, edges, cv::Size(7,7), 1.5, 1.5, cv::BorderTypes::BORDER_DEFAULT);  // default parameters
+		//cv::Canny(edges, edges, 0, 30, 3);														 // default parameters
+
+		//cv::GaussianBlur(edges, edges, cv::Size(7,7), 1.5, 1.5, cv::BorderTypes::BORDER_DEFAULT); 
+		//cv::Canny(edges, edges, 50, 90, 3);
+
+		//imshow("Camera edges", edges);
+		cv::namedWindow(wndName, cv::WINDOW_AUTOSIZE);
+		imshow(wndName, frame);
+
+		if (cv::waitKey(27) >= 0) 
+		{
+			break;
+		}
+	}
+
+	return 0;
+}
 
 // // ===== MANUAL SET KEY POINTS =====
 //int main() 
@@ -922,12 +927,15 @@
 //    cv::cvtColor(mainImg, mainImg, cv::COLOR_GRAY2BGR);
 //
 //    tempImg = mainImg.clone();
-//    cv::namedWindow("Select ROI");
-//    cv::setMouseCallback("Select ROI", onMouse);
+//
+//	const char* selectRoiWindow = "Select ROI RECT";
+//
+//    cv::namedWindow(selectRoiWindow);
+//    cv::setMouseCallback(selectRoiWindow, onMouse);
 //
 //    while (true)
 //    {
-//        cv::imshow("Select ROI",tempImg);
+//        cv::imshow(selectRoiWindow, tempImg);
 //
 //        char key = cv::waitKey(1);
 //
@@ -937,7 +945,7 @@
 //        }
 //    }
 //
-//    cv::setMouseCallback("Select ROI", NULL);
+//    cv::setMouseCallback(selectRoiWindow, NULL);
 //
 //    // Min задаёт верхний левый угол прямоугольника
 //    int x1 = std::min(startPoint.x, endPoint.x);
@@ -948,13 +956,26 @@
 //    cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
 //    cv::Mat imageRoi = mainImg(roiRect);
 //
-//    cv::imshow("ROI rect", imageRoi);
+//    cv::imshow("ROI image", imageRoi);
 //
-//    const int offset = 0;
-//    cv::Rect imageRoiRect(offset, offset, imageRoi.size().width - offset, imageRoi.size().height - offset);
+//    //const int offset = 0;
+//    //cv::Rect imageRoiRect(offset, offset, imageRoi.size().width - offset, imageRoi.size().height - offset);
+//
+//	// >===< Old style
+//
+//	//IplImage* mainImgPtrCopy = cvLoadImage(mainImgFile, 1);
+//
+//	//cvSetImageROI(mainImgPtrCopy, imageRoiRect);
+//	//cvAddS(mainImgPtrCopy, cvScalar(200), mainImgPtrCopy);
+//	//// сбрасываем ROI
+//	//cvResetImageROI(mainImgPtrCopy);
+//	//// показываем изображение
+//	//cvShowImage("ROI colored region", mainImgPtrCopy);
+//
+//	// >===<
 //
 //    cv::imshow("Main image", mainImg);
-//    cv::imshow("ROI", imageRoi);
+//
 //    cv::waitKey(0);
 //
 //    cv::imwrite("ROI.jpg", imageRoi);
