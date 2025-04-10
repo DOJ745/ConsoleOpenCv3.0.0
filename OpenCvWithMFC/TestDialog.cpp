@@ -38,17 +38,10 @@ void AttachOpenCVWindowToMFC(HWND hwndDialog)
 	cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_NORMAL);
 
 	CRect windowContainer;
-	RECT clientParentRect;      // –азмеры клиентской области окна MFC
-	POINT clientOffsetTopLeft;	// —мещение клиентской области относительно окна
+	CRect clientParentRect;      // –азмеры клиентской области окна MFC
 
 	// ѕолучаем размеры клиентской области окна MFC
 	::GetClientRect(hwndDialog, &clientParentRect);
-
-	// ѕреобразуем верхний левый угол клиентской области в глобальные координаты
-	::ClientToScreen(hwndDialog, &clientOffsetTopLeft);
-
-	clientOffsetTopLeft.x = 0;
-	clientOffsetTopLeft.y = 0;
 
 	// Ќайти окно OpenCV (контейнер вместе с элементом, где отображаютс€ кадры)
 	HWND hwndOpenCV = static_cast<HWND>(cvGetWindowHandle(OPEN_CV_WINDOW_NAME.c_str()));
@@ -79,25 +72,17 @@ void AttachOpenCVWindowToMFC(HWND hwndDialog)
 
 	if (parentHwndOpenCV != NULL) 
 	{
-		// ќграничиваем размеры окна OpenCV в пределах клиентской области MFC
-		int maxWidth = clientParentRect.right - clientParentRect.left;
-		int maxHeight = clientParentRect.bottom - clientParentRect.top;
+		// ќграничиваем размеры окна OpenCV в пределах окна клиентской области MFC
+		int maxWidth = clientParentRect.Width();
+		int maxHeight = clientParentRect.Height();
 
 		int minWidth = 1280;
 		int minHeight = 1024;
 
 		int width = std::min(minWidth, maxWidth);
-		int height = std::min(minHeight, maxHeight);
+		int height = std::min(minHeight, maxHeight);;
 
-		int offsetX = 0;
-		int offsetY = 0;
-
-		// ¬ычисл€ем позицию OpenCV окна относительно клиентской области
-		int posX = clientOffsetTopLeft.x + offsetX;
-		int posY = clientOffsetTopLeft.y + offsetY;
-
-		// ”станавливаем окно OpenCV как дочернее дл€ окна MFC
-		//HWND prevParent = ::SetParent(parentHwndOpenCV, hwndDialog);
+		// ”станавливаем окно OpenCV как дочернее дл€ контейнера внутри окна MFC
 		HWND prevParent = ::SetParent(parentHwndOpenCV, windowContainerHwnd);
 
 		if (prevParent == NULL)
@@ -119,10 +104,9 @@ void AttachOpenCVWindowToMFC(HWND hwndDialog)
 
 		// ”станавливаем положение окна OpenCV относительно окна MFC
 		::SetWindowPos(parentHwndOpenCV
-			, hwndDialog
-			//, NULL
-			, posX
-			, posY
+			, NULL
+			, 0
+			, 0
 			, 800
 			, 600
 			, SWP_NOZORDER);
@@ -139,32 +123,35 @@ IMPLEMENT_DYNAMIC(TestDialog, CDialogEx)
 
 TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 	: CDialogEx(TestDialog::IDD, pParent)
-	, m_Capture(NULL)
-	, m_CurrentFrame()
-	, m_DrawFrame()
-	, m_StopThread(false)
-	, m_IsDrawing(false)
-	, m_VideoThread(NULL)
-	, m_CursorChildCoord(_T("MOUSE COORDS"))
+	, m_videoCapture(NULL)
+	, m_currentFrame()
+	, m_rectFrame()
+	, m_stopThread(false)
+	, m_isDrawing(false)
+	, m_videoThread(NULL)
+	, m_cursorChildCoord(_T("MOUSE COORDS"))
 {
-	  InitializeCriticalSection(&m_CriticalSection);
+	  InitializeCriticalSection(&m_criticalSection);
 }
 
 TestDialog::~TestDialog()
 {
-	m_StopThread = true;
+	m_stopThread = true;
 	
-	if (m_VideoThread)
+	if (m_videoThread && m_videoThread->m_hThread)
 	{
-		WaitForSingleObject(m_VideoThread->m_hThread, INFINITE);
+		WaitForSingleObject(m_videoThread->m_hThread, INFINITE);
 	}
 
-	DeleteCriticalSection(&m_CriticalSection);
+	DeleteCriticalSection(&m_criticalSection);
 
-	if (m_Capture.isOpened())
+	if (m_videoCapture.isOpened())
 	{
-		m_Capture.release();
+		m_videoCapture.release();
 	}
+
+	m_rectFrame.release();
+	m_currentFrame.release();
 
 	cv::destroyAllWindows();
 }
@@ -172,7 +159,7 @@ TestDialog::~TestDialog()
 void TestDialog::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
-	DDX_Text(pDX, IDC_STATIC_MOUSE_COORDS, m_CursorChildCoord);
+	DDX_Text(pDX, IDC_STATIC_MOUSE_COORDS, m_cursorChildCoord);
 }
 
 BOOL TestDialog::OnInitDialog()
@@ -193,13 +180,18 @@ BOOL TestDialog::OnInitDialog()
 		, tempRect.top - tempRect.bottom
 		, SWP_NOSIZE | SWP_NOZORDER);
 
-	m_Capture = cv::VideoCapture(0);
+	if (m_videoCapture.isOpened())
+	{
+		m_videoCapture.release();
+	}
 
-	if (!m_Capture.isOpened()) 
+	m_videoCapture = cv::VideoCapture(0);
+
+	if (!m_videoCapture.isOpened()) 
 	{
 		AfxMessageBox(L"Ќе удалось открыть камеру!");
 
-		m_Capture.release();
+		m_videoCapture.release();
 
 		return FALSE;
 	}
@@ -207,13 +199,13 @@ BOOL TestDialog::OnInitDialog()
 	const unsigned int defaultFrameWidth = 1280;
 	const unsigned int defaultFrameHeight = 1024;
 
-	if (!m_Capture.set(cv::CAP_PROP_FRAME_WIDTH, defaultFrameWidth))
+	if (!m_videoCapture.set(cv::CAP_PROP_FRAME_WIDTH, defaultFrameWidth))
 	{
 		MessageBox(_T("Ќе удалось задать ширину кадра камеры!"));
 		return FALSE;
 	}
 
-	if (!m_Capture.set(cv::CAP_PROP_FRAME_HEIGHT, defaultFrameHeight))
+	if (!m_videoCapture.set(cv::CAP_PROP_FRAME_HEIGHT, defaultFrameHeight))
 	{
 		MessageBox(_T("Ќе удалось задать высоту кадра камеры!"));
 		return FALSE;
@@ -223,9 +215,9 @@ BOOL TestDialog::OnInitDialog()
 
 	cv::setMouseCallback(OPEN_CV_WINDOW_NAME, MouseCallback, this);
 
-	m_VideoThread = AfxBeginThread(VideoThread, this);
+	m_videoThread = AfxBeginThread(VideoThread, this);
 	
-	if (m_VideoThread == NULL)
+	if (m_videoThread == NULL)
 	{
 		MessageBox(_T("Ќе удалось создать поток!"));
 		return FALSE;
@@ -234,18 +226,12 @@ BOOL TestDialog::OnInitDialog()
 	return TRUE;
 }
 
-void TestDialog::OnDestroy()
-{
-	if (m_Capture.isOpened())
-	{
-		m_Capture.release();
-	}
-	CDialogEx::OnDestroy();
-}
-
 BEGIN_MESSAGE_MAP(TestDialog, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_SHOW_MESSAGE, &TestDialog::OnBnClickedButtonShowMessage)
 	ON_BN_CLICKED(IDC_BUTTON_STOP_VIDEO, &TestDialog::OnBnClickedButtonStopVideo)
+	ON_WM_DESTROY()
+	ON_BN_CLICKED(IDOK, &TestDialog::OnBnClickedOk)
+	ON_BN_CLICKED(IDCANCEL, &TestDialog::OnBnClickedCancel)
 END_MESSAGE_MAP()
 
 
@@ -256,42 +242,32 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 {
 	TestDialog* dlg = static_cast<TestDialog*>(pParam);
 
-	while (!dlg->m_StopThread && dlg->m_Capture.isOpened()) 
+	while (!dlg->m_stopThread && dlg->m_videoCapture.isOpened()) 
 	{
 		cv::Mat frame;
 
-		dlg->m_Capture >> frame;
+		dlg->m_videoCapture >> frame;
 
 		if (frame.empty())
 		{
 			continue;
 		}	
 
-		EnterCriticalSection(&dlg->m_CriticalSection);
+		EnterCriticalSection(&dlg->m_criticalSection);
 
-		dlg->CloneFrame(frame, dlg->m_CurrentFrame);
+		dlg->m_currentFrame = frame.clone();
 
-		if (!dlg->m_IsDrawing) 
+		if (!dlg->m_isDrawing) 
 		{
-			dlg->CloneFrame(frame, dlg->m_DrawFrame);
+			dlg->m_rectFrame = frame.clone();
 		}
 
-		/*if (!dlg->m_DrawFrame.empty()) 
+		if (!dlg->m_rectFrame.empty()) 
 		{
-			cv::imshow(OPEN_CV_WINDOW_NAME, dlg->m_DrawFrame);
-		} */
-
-		LeaveCriticalSection(&dlg->m_CriticalSection);
-
-		if (!dlg->m_DrawFrame.empty()) 
-		{
-			cv::imshow(OPEN_CV_WINDOW_NAME, dlg->m_DrawFrame);
+			cv::imshow(OPEN_CV_WINDOW_NAME, dlg->m_rectFrame);
 		}
 
-		//if (cv::waitKey(1) == 27) 
-		//{
-		//	dlg->m_StopThread = true;
-		//}
+		LeaveCriticalSection(&dlg->m_criticalSection);
 	}
 
 	return 0;
@@ -304,52 +280,64 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 	switch (event) 
 	{
 	case cv::EVENT_LBUTTONDOWN:
-		dlg->m_IsDrawing = true;
-		dlg->m_StartPoint = cv::Point(x, y);
+		dlg->m_isDrawing = true;
+		dlg->m_startPoint = cv::Point(x, y);
 		dlg->SetCursorCoords(x, y);
 		break;
 
 	case cv::EVENT_MOUSEMOVE:
-		if (dlg->m_IsDrawing) 
+		if (dlg->m_isDrawing) 
 		{
-			EnterCriticalSection(&dlg->m_CriticalSection);
+			EnterCriticalSection(&dlg->m_criticalSection);
 
-			if (!dlg->m_CurrentFrame.empty())
+			if (!dlg->m_currentFrame.empty())
 			{
-				dlg->CloneFrame(dlg->m_CurrentFrame, dlg->m_DrawFrame);
-				setPointInImage(dlg->m_DrawFrame.cols, dlg->m_DrawFrame.rows, x, y);
-				dlg->m_EndPoint = cv::Point(x, y);
-				cv::rectangle(dlg->m_DrawFrame, dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
+				dlg->m_rectFrame = dlg->m_currentFrame.clone();
+
+				setPointInImage(dlg->m_rectFrame.cols, dlg->m_rectFrame.rows, x, y);
+				dlg->m_endPoint = cv::Point(x, y);
+				cv::rectangle(dlg->m_rectFrame, dlg->m_startPoint, dlg->m_endPoint, cv::Scalar(0, 255, 0), 2);
 
 				dlg->SetCursorCoords(x, y);
 			}
 
-			LeaveCriticalSection(&dlg->m_CriticalSection);
+			LeaveCriticalSection(&dlg->m_criticalSection);
 		}
 		break;
 
 	case cv::EVENT_LBUTTONUP:
-		dlg->m_IsDrawing = false;
+		dlg->m_isDrawing = false;
 
-		EnterCriticalSection(&dlg->m_CriticalSection);
+		EnterCriticalSection(&dlg->m_criticalSection);
 
-		if (!dlg->m_CurrentFrame.empty())
+		if (!dlg->m_currentFrame.empty())
 		{
-			dlg->CloneFrame(dlg->m_CurrentFrame, dlg->m_DrawFrame);
+			dlg->m_rectFrame = dlg->m_currentFrame.clone();
 
-			setPointInImage(dlg->m_DrawFrame.cols, dlg->m_DrawFrame.rows, x, y);
-			dlg->m_EndPoint = cv::Point(x, y);
-			cv::rectangle(dlg->m_DrawFrame, dlg->m_StartPoint, dlg->m_EndPoint, cv::Scalar(0, 255, 0), 2);
+			setPointInImage(dlg->m_rectFrame.cols, dlg->m_rectFrame.rows, x, y);
+			dlg->m_endPoint = cv::Point(x, y);
+			cv::rectangle(dlg->m_rectFrame, dlg->m_startPoint, dlg->m_endPoint, cv::Scalar(0, 255, 0), 2);
 
 			dlg->SetCursorCoords(x, y);
+
+			// Min задаЄт верхний левый угол пр€моугольника
+			int x1 = std::min(dlg->m_startPoint.x, dlg->m_endPoint.x);
+			int y1 = std::min(dlg->m_startPoint.y, dlg->m_endPoint.y);
+			int x2 = std::max(dlg->m_startPoint.x, dlg->m_endPoint.x);
+			int y2 = std::max(dlg->m_startPoint.y, dlg->m_endPoint.y);
+
+			cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
+			cv::Mat imageRoi = dlg->m_currentFrame(roiRect);
+
+			cv::imshow("ROI image", imageRoi);
+
+			if (cv::imwrite("SelectedROI.jpg", imageRoi))
+			{
+				AfxMessageBox(L"Image has been saved!", MB_OK | MB_ICONINFORMATION, NULL);
+			}
 		}
 
-		if (cv::imwrite("CelectedArea.jpg", dlg->m_DrawFrame))
-		{
-			AfxMessageBox(L"Image has been saved!", MB_OK | MB_ICONINFORMATION, NULL);
-		}
-
-		LeaveCriticalSection(&dlg->m_CriticalSection);
+		LeaveCriticalSection(&dlg->m_criticalSection);
 
 		break;
 	}
@@ -362,8 +350,8 @@ void TestDialog::CloneFrame(const cv::Mat& source, cv::Mat& destination)
 
 void TestDialog::SetCursorCoords(int x, int y)
 {
-	m_CursorChildCoord.Format(_TEXT("Cursor coords: x: %d, y: %d"), x, y);
-	SetDlgItemText(IDC_STATIC_MOUSE_COORDS, m_CursorChildCoord);
+	m_cursorChildCoord.Format(_TEXT("Cursor coords: x: %d, y: %d"), x, y);
+	SetDlgItemText(IDC_STATIC_MOUSE_COORDS, m_cursorChildCoord);
 }
 
 void TestDialog::OnBnClickedButtonShowMessage()
@@ -373,7 +361,18 @@ void TestDialog::OnBnClickedButtonShowMessage()
 
 void TestDialog::OnBnClickedButtonStopVideo()
 {
-	m_Capture.release();
+	m_videoCapture.release();
+}
+
+void TestDialog::OnDestroy()
+{
+	CDialogEx::OnDestroy();
+
+	if (m_videoCapture.isOpened())
+	{
+		m_videoCapture.release();
+	}
+	Sleep(2000);
 }
 
 // FILTERS TO APPLY
@@ -402,3 +401,16 @@ void TestDialog::OnBnClickedButtonStopVideo()
 //int tempCannyThreshold1 = 50;
 //int tempCannyThreshold2 = 90;
 //cv::Canny(finalFiltered, finalFiltered, tempCannyThreshold1, tempCannyThreshold2);
+
+void TestDialog::OnBnClickedOk()
+{
+	OnDestroy();
+	CDialogEx::OnOK();
+}
+
+
+void TestDialog::OnBnClickedCancel()
+{
+	OnDestroy();
+	CDialogEx::OnCancel();
+}

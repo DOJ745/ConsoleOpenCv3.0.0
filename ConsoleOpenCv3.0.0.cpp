@@ -823,165 +823,165 @@ int _tmain(int argc, _TCHAR* argv[])
 //    return 0;
 //}
 
-//// ===== Select ROI by mouse =====
-//
-//void setPointInImage(const int width, const int height, int& x, int& y)
-//{
-//    if (x > width)
-//    {
-//        x = width;
-//    }
-//
-//    if (x < 0)
-//    {
-//        x = 0;
-//    }
-//
-//    if (y > height)
-//    {
-//        y = height;
-//    }
-//
-//    if (y < 0)
-//    {
-//        y = 0;
-//    }
-//}
-//
-//bool isDrawing = false;
-//cv::Mat templateImg, mainImg, tempImg; 
-//cv::Point startPoint, centerPoint, endPoint;
-//
-//void onMouse(int event, int x, int y, int, void*) 
-//{
-//    switch (event) 
-//    {
-//    case cv::EVENT_LBUTTONDOWN:
-//        isDrawing = true;
-//        startPoint = cv::Point(x, y);
-//        cv::circle(tempImg, startPoint, 5, cv::Scalar(0, 255, 0), -1);
-//        break;
-//
-//    case cv::EVENT_MOUSEMOVE:
-//
-//        if (isDrawing)
-//        {
-//            tempImg = mainImg.clone();
-//            
-//            setPointInImage(tempImg.cols, tempImg.rows, x, y);
-//
-//            endPoint = cv::Point(x, y);
-//
-//            cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
-//        }
-//        break;
-//
-//    case cv::EVENT_LBUTTONUP:
-//        isDrawing = false;
-//
-//        setPointInImage(tempImg.cols, tempImg.rows, x, y);
-//        endPoint = cv::Point(x, y);
-//
-//        cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
-//        cv::circle(tempImg, endPoint, 5, cv::Scalar(0, 255, 0), -1);
-//
-//        centerPoint = cv::Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
-//
-//        cv::circle(tempImg, centerPoint, 15, cv::Scalar(255, 0, 0), -1);
-//        break;
-//    }
-//}
-//
-//int main()
-//{
-//    setlocale(LC_ALL, "Russian");
-//
-//    int imgReadMode = cv::IMREAD_GRAYSCALE;
-//    const char* templateImgFile = "images/HD-CHIP-SURFACE.jpg";
-//    const char* mainImgFile = "images/HD-CHIP.jpg";
-//
-//    templateImg = cv::imread(templateImgFile, imgReadMode);
-//
-//    if (templateImg.empty())
-//    {
-//        std::cerr << "Ошибка: не удалось загрузить изображение " << templateImgFile << ".\n";
-//        return -1;
-//    }
-//
-//    mainImg = cv::imread(mainImgFile, imgReadMode);
-//
-//    if (mainImg.empty())
-//    {
-//        std::cerr << "Ошибка: не удалось загрузить изображение " << mainImgFile << ".\n";
-//        return -1;
-//    }
-//
-//    const double resizeTemplate = 0.20;
-//    const double resizeMain = 0.20;
-//
-//    cv::resize(templateImg, templateImg, cv::Size(), resizeTemplate, resizeTemplate, cv::INTER_AREA);
-//    cv::resize(mainImg, mainImg, cv::Size(), resizeMain, resizeMain, cv::INTER_AREA);
-//
-//    // Преобразуем изображение в 3-канальный формат (BGR) для отрисовки RGB палитры
-//    // Серый цвет останется таким же, потому что значения для каждого канала будут одинаковы
-//    cv::cvtColor(mainImg, mainImg, cv::COLOR_GRAY2BGR);
-//
-//    tempImg = mainImg.clone();
-//
-//	const char* selectRoiWindow = "Select ROI RECT";
-//
-//    cv::namedWindow(selectRoiWindow);
-//    cv::setMouseCallback(selectRoiWindow, onMouse);
-//
-//    while (true)
-//    {
-//        cv::imshow(selectRoiWindow, tempImg);
-//
-//        char key = cv::waitKey(1);
-//
-//        if (key == 'q' || key == 27) 
-//        {
-//            break;
-//        }
-//    }
-//
-//    cv::setMouseCallback(selectRoiWindow, NULL);
-//
-//    // Min задаёт верхний левый угол прямоугольника
-//    int x1 = std::min(startPoint.x, endPoint.x);
-//    int y1 = std::min(startPoint.y, endPoint.y);
-//    int x2 = std::max(startPoint.x, endPoint.x);
-//    int y2 = std::max(startPoint.y, endPoint.y);
-//
-//    cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
-//    cv::Mat imageRoi = mainImg(roiRect);
-//
-//    cv::imshow("ROI image", imageRoi);
-//
-//    //const int offset = 0;
-//    //cv::Rect imageRoiRect(offset, offset, imageRoi.size().width - offset, imageRoi.size().height - offset);
-//
-//	// >===< Old style
-//
-//	//IplImage* mainImgPtrCopy = cvLoadImage(mainImgFile, 1);
-//
-//	//cvSetImageROI(mainImgPtrCopy, imageRoiRect);
-//	//cvAddS(mainImgPtrCopy, cvScalar(200), mainImgPtrCopy);
-//	//// сбрасываем ROI
-//	//cvResetImageROI(mainImgPtrCopy);
-//	//// показываем изображение
-//	//cvShowImage("ROI colored region", mainImgPtrCopy);
-//
-//	// >===<
-//
-//    cv::imshow("Main image", mainImg);
-//
-//    cv::waitKey(0);
-//
-//    cv::imwrite("ROI.jpg", imageRoi);
-//
-//    return 0;
-//}
+// ===== Select ROI by mouse =====
+
+void setPointInImage(const int width, const int height, int& x, int& y)
+{
+    if (x > width)
+    {
+        x = width;
+    }
+
+    if (x < 0)
+    {
+        x = 0;
+    }
+
+    if (y > height)
+    {
+        y = height;
+    }
+
+    if (y < 0)
+    {
+        y = 0;
+    }
+}
+
+bool isDrawing = false;
+cv::Mat templateImg, mainImg, tempImg; 
+cv::Point startPoint, centerPoint, endPoint;
+
+void onMouse(int event, int x, int y, int, void*) 
+{
+    switch (event) 
+    {
+    case cv::EVENT_LBUTTONDOWN:
+        isDrawing = true;
+        startPoint = cv::Point(x, y);
+        cv::circle(tempImg, startPoint, 5, cv::Scalar(0, 255, 0), -1);
+        break;
+
+    case cv::EVENT_MOUSEMOVE:
+
+        if (isDrawing)
+        {
+            tempImg = mainImg.clone();
+            
+            setPointInImage(tempImg.cols, tempImg.rows, x, y);
+
+            endPoint = cv::Point(x, y);
+
+            cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+        }
+        break;
+
+    case cv::EVENT_LBUTTONUP:
+        isDrawing = false;
+
+        setPointInImage(tempImg.cols, tempImg.rows, x, y);
+        endPoint = cv::Point(x, y);
+
+        cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+        cv::circle(tempImg, endPoint, 5, cv::Scalar(0, 255, 0), -1);
+
+        centerPoint = cv::Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
+
+        cv::circle(tempImg, centerPoint, 15, cv::Scalar(255, 0, 0), -1);
+        break;
+    }
+}
+
+int main()
+{
+    setlocale(LC_ALL, "Russian");
+
+    int imgReadMode = cv::IMREAD_GRAYSCALE;
+    const char* templateImgFile = "images/HD-CHIP-SURFACE.jpg";
+    const char* mainImgFile = "images/HD-CHIP.jpg";
+
+    templateImg = cv::imread(templateImgFile, imgReadMode);
+
+    if (templateImg.empty())
+    {
+        std::cerr << "Ошибка: не удалось загрузить изображение " << templateImgFile << ".\n";
+        return -1;
+    }
+
+    mainImg = cv::imread(mainImgFile, imgReadMode);
+
+    if (mainImg.empty())
+    {
+        std::cerr << "Ошибка: не удалось загрузить изображение " << mainImgFile << ".\n";
+        return -1;
+    }
+
+    const double resizeTemplate = 0.20;
+    const double resizeMain = 0.20;
+
+    cv::resize(templateImg, templateImg, cv::Size(), resizeTemplate, resizeTemplate, cv::INTER_AREA);
+    cv::resize(mainImg, mainImg, cv::Size(), resizeMain, resizeMain, cv::INTER_AREA);
+
+    // Преобразуем изображение в 3-канальный формат (BGR) для отрисовки RGB палитры
+    // Серый цвет останется таким же, потому что значения для каждого канала будут одинаковы
+    cv::cvtColor(mainImg, mainImg, cv::COLOR_GRAY2BGR);
+
+    tempImg = mainImg.clone();
+
+	const char* selectRoiWindow = "Select ROI RECT";
+
+    cv::namedWindow(selectRoiWindow);
+    cv::setMouseCallback(selectRoiWindow, onMouse);
+
+    while (true)
+    {
+        cv::imshow(selectRoiWindow, tempImg);
+
+        char key = cv::waitKey(1);
+
+        if (key == 'q' || key == 27) 
+        {
+            break;
+        }
+    }
+
+    cv::setMouseCallback(selectRoiWindow, NULL);
+
+    // Min задаёт верхний левый угол прямоугольника
+    int x1 = std::min(startPoint.x, endPoint.x);
+    int y1 = std::min(startPoint.y, endPoint.y);
+    int x2 = std::max(startPoint.x, endPoint.x);
+    int y2 = std::max(startPoint.y, endPoint.y);
+
+    cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
+    cv::Mat imageRoi = mainImg(roiRect);
+
+    cv::imshow("ROI image", imageRoi);
+
+    //const int offset = 0;
+    //cv::Rect imageRoiRect(offset, offset, imageRoi.size().width - offset, imageRoi.size().height - offset);
+
+	// >===< Old style
+
+	//IplImage* mainImgPtrCopy = cvLoadImage(mainImgFile, 1);
+
+	//cvSetImageROI(mainImgPtrCopy, imageRoiRect);
+	//cvAddS(mainImgPtrCopy, cvScalar(200), mainImgPtrCopy);
+	//// сбрасываем ROI
+	//cvResetImageROI(mainImgPtrCopy);
+	//// показываем изображение
+	//cvShowImage("ROI colored region", mainImgPtrCopy);
+
+	// >===<
+
+    cv::imshow("Main image", mainImg);
+
+    cv::waitKey(0);
+
+    cv::imwrite("ROI.jpg", imageRoi);
+
+    return 0;
+}
 
 //// ===== Testing scaling =====
 //int main() 

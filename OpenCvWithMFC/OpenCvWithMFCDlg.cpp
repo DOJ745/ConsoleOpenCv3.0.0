@@ -24,8 +24,12 @@ cv::Mat SAVED_FRAME;
 const char* COMPARE_IMG = "compare.jpg";
 const char* ETHALON_IMG = "ethalon.jpg";
 
+const int DEFAULT_CAMERA_FRAME_WIDTH = 1280;
+const int DEFAULT_CAMERA_FRAME_HEIGHT = 1024;
+
 UINT_PTR TIMER_ID = 1;
 UINT TIMER_INTERVAL_MS = 1;
+
 volatile bool stopThread = false; // Флаг для остановки потока
 
 void DrawFrameToPictureControl(CWnd* pWnd, const cv::Mat& img)
@@ -424,16 +428,14 @@ void COpenCvWithMFCDlg::OnBnClickedButtonStart()
 		return;
 	}
 
-	const int defaultFrameWidth = 1280;
-	const int defaultFrameHeight = 1024;
 
-	if (!CAP.set(cv::CAP_PROP_FRAME_WIDTH, defaultFrameWidth))
+	if (!CAP.set(cv::CAP_PROP_FRAME_WIDTH, DEFAULT_CAMERA_FRAME_WIDTH))
 	{
 		MessageBox(_T("Не удалось задать ширину кадра камеры!"));
 		return;
 	}
 
-	if (!CAP.set(cv::CAP_PROP_FRAME_HEIGHT, defaultFrameHeight))
+	if (!CAP.set(cv::CAP_PROP_FRAME_HEIGHT, DEFAULT_CAMERA_FRAME_HEIGHT))
 	{
 		MessageBox(_T("Не удалось задать высоту кадра камеры!"));
 		return;
