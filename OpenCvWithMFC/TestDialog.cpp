@@ -6,8 +6,8 @@
 #include "TestDialog.h"
 #include "afxdialogex.h"
 
-// Space in name impacts the window... why?
-const std::string OPEN_CV_WINDOW_NAME = "OpenCV Window";
+// Space in name impacts the window style
+const std::string OPEN_CV_WINDOW_NAME = "OpenCVWindow";
 
 void setPointInImage(const int width, const int height, int& x, int& y)
 {
@@ -33,33 +33,51 @@ void setPointInImage(const int width, const int height, int& x, int& y)
 }
 
 // Функция для привязки окна OpenCV к области MFC
-void AttachOpenCVWindowToMFC(HWND hwndParent)
+void AttachOpenCVWindowToMFC(HWND hwndDialog)
 {	
 	cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_NORMAL);
 
+	CRect windowContainer;
 	RECT clientParentRect;      // Размеры клиентской области окна MFC
 	POINT clientOffsetTopLeft;	// Смещение клиентской области относительно окна
 
 	// Получаем размеры клиентской области окна MFC
-	::GetClientRect(hwndParent, &clientParentRect);
+	::GetClientRect(hwndDialog, &clientParentRect);
 
 	// Преобразуем верхний левый угол клиентской области в глобальные координаты
-	::ClientToScreen(hwndParent, &clientOffsetTopLeft);
+	::ClientToScreen(hwndDialog, &clientOffsetTopLeft);
 
 	clientOffsetTopLeft.x = 0;
 	clientOffsetTopLeft.y = 0;
 
-	// Найти окно OpenCV
+	// Найти окно OpenCV (контейнер вместе с элементом, где отображаются кадры)
 	HWND hwndOpenCV = static_cast<HWND>(cvGetWindowHandle(OPEN_CV_WINDOW_NAME.c_str()));
 	HWND parentHwndOpenCV = ::GetParent(hwndOpenCV);
 
-	if (parentHwndOpenCV != NULL)
+	CWnd* ptrWindowContainer = CWnd::FromHandle(hwndDialog)->GetDlgItem(IDC_OPENCV_CONTAINER);
+	HWND windowContainerHwnd; 
+
+	if (!ptrWindowContainer) 
 	{
-		// Скрываем окно OpenCV
-		::ShowWindow(parentHwndOpenCV, SW_HIDE);
+		return;
+	}
+	else
+	{
+		windowContainerHwnd = ptrWindowContainer->GetSafeHwnd();
+
+		::GetClientRect(windowContainerHwnd, &windowContainer);
+
+		::SetWindowPos(windowContainerHwnd
+			, hwndDialog
+			, 0
+			, 0
+			, windowContainer.Width()
+			, windowContainer.Height()
+			, SWP_NOZORDER
+			);
 	}
 
-	if (hwndOpenCV) 
+	if (parentHwndOpenCV != NULL) 
 	{
 		// Ограничиваем размеры окна OpenCV в пределах клиентской области MFC
 		int maxWidth = clientParentRect.right - clientParentRect.left;
@@ -79,7 +97,8 @@ void AttachOpenCVWindowToMFC(HWND hwndParent)
 		int posY = clientOffsetTopLeft.y + offsetY;
 
 		// Устанавливаем окно OpenCV как дочернее для окна MFC
-		HWND prevParent = ::SetParent(hwndOpenCV, hwndParent);
+		//HWND prevParent = ::SetParent(parentHwndOpenCV, hwndDialog);
+		HWND prevParent = ::SetParent(parentHwndOpenCV, windowContainerHwnd);
 
 		if (prevParent == NULL)
 		{
@@ -90,52 +109,28 @@ void AttachOpenCVWindowToMFC(HWND hwndParent)
 			return;
 		}
 
+		LONG style = GetWindowLong(parentHwndOpenCV, GWL_STYLE);
+
 		// Убираем заголовок и предотвращаем перемещение
-		LONG style = GetWindowLong(hwndOpenCV, GWL_STYLE);
-		style &= ~(WS_POPUP | WS_BORDER);
-		//style |= WS_CHILD | WS_VISIBLE;
-		::SetWindowLongPtr(hwndOpenCV, GWL_STYLE, style);
+		style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME);
+		style |= WS_CHILD | DS_MODALFRAME;
+
+		::SetWindowLongPtr(parentHwndOpenCV, GWL_STYLE, style);
 
 		// Устанавливаем положение окна OpenCV относительно окна MFC
-		::SetWindowPos(hwndOpenCV
-			, NULL
+		::SetWindowPos(parentHwndOpenCV
+			, hwndDialog
+			//, NULL
 			, posX
 			, posY
-			, width
-			, height
-			, SWP_NOZORDER | SWP_FRAMECHANGED);
-	} 
-
-	/*cv::namedWindow(OPEN_CV_WINDOW_NAME, cv::WINDOW_FREERATIO);
-	HWND hwndOpenCV = (HWND)cvGetWindowHandle(OPEN_CV_WINDOW_NAME.c_str());
-
-	// Получаем контейнер в диалоге
-	CWnd* pContainer = CWnd::FromHandle(hwndParent)->GetDlgItem(IDC_OPENCV_CONTAINER);
-
-	if (!pContainer || !hwndOpenCV) 
+			, 800
+			, 600
+			, SWP_NOZORDER);
+	}
+	else
 	{
 		return;
 	}
-
-	// Устанавливаем как дочернее окно
-	::SetParent(hwndOpenCV, hwndParent);
-
-	// Настройка стилей
-	LONG style = ::GetWindowLong(hwndOpenCV, GWL_STYLE);
-	style &= ~(WS_POPUP | WS_BORDER);
-	style |= WS_CHILD | WS_VISIBLE;
-	::SetWindowLongPtr(hwndOpenCV, GWL_STYLE, style);
-
-	// Позиция и размеры
-	CRect rect;
-
-	pContainer->GetWindowRect(&rect);
-	::SetWindowPos(
-		hwndOpenCV, NULL, 
-		rect.left, rect.top, 
-		rect.Width(), rect.Height(),
-		SWP_NOZORDER | SWP_FRAMECHANGED
-		); */
 }
 
 // TestDialog dialog
