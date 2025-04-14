@@ -32,8 +32,13 @@ public:
 	// Высота кадра для масштабирования
 	int m_resizeFrameHeight;
 
+	// Применить фильтр Кенни (контуры)
 	BOOL m_applyCanny;
+
+	// Применить фильтр Гаусса (размытие)
 	BOOL m_applyGaussian;
+
+	// Применить фильтр CLAHE (яркость и контрастность)
 	BOOL m_applyClahe;
 
 public:
@@ -65,7 +70,6 @@ private:
 
 	DECLARE_MESSAGE_MAP()
 public:
-	afx_msg void OnBnClickedButtonShowMessage();
 
 	void SetCursorCoords(int x, int y);
 private:
@@ -76,4 +80,23 @@ public:
 	afx_msg void OnDestroy();
 	afx_msg void OnBnClickedOk();
 	afx_msg void OnBnClickedCancel();
+
+	afx_msg void OnEnUpdateEditCannyThreshold1();
+	afx_msg void OnEnUpdateEditCannyThreshold2();
+	afx_msg void OnEnUpdateEditGaussianKernelSize1();
+	afx_msg void OnEnUpdateEditGaussianKernelSize2();
+	afx_msg void OnBnClickedButtonSavePicture();
+	afx_msg void OnBnClickedButtonCompareFrame();
+	afx_msg void OnEnUpdateEditResizeFrameWidth();
+	afx_msg void OnEnUpdateEditResizeFrameHeight();
+	afx_msg void OnBnClickedButtonOpenDialog();
+	afx_msg void OnEnUpdateEditClaheClipLimit();
+	afx_msg void OnEnUpdateEditClaheWidth();
+	afx_msg void OnEnUpdateEditClaheHeight();
+	afx_msg void OnBnClickedCheckApplyCanny();
+	afx_msg void OnBnClickedCheckApplyGaussian();
+	afx_msg void OnBnClickedCheckApplyClahe();
+	BOOL m_makeGray;
+	afx_msg void OnBnClickedCheckMakeGray();
+	afx_msg void OnBnClickedButtonTestCompareFrames();
 };
