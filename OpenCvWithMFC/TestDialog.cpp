@@ -5,6 +5,7 @@
 #include "OpenCvWithMFC.h"
 #include "TestDialog.h"
 #include "afxdialogex.h"
+#include <time.h>
 
 // Space in name impacts the window style
 const std::string OPEN_CV_WINDOW_NAME = "OpenCVWindow";
@@ -159,7 +160,7 @@ TestDialog::~TestDialog()
 		WaitForSingleObject(m_videoThread->m_hThread, INFINITE);
 	}
 
-	DeleteCriticalSection(&m_criticalSection);
+	//DeleteCriticalSection(&m_criticalSection);
 
 	if (m_videoCapture.isOpened())
 	{
@@ -170,6 +171,8 @@ TestDialog::~TestDialog()
 	m_currentFrame.release();
 
 	cv::destroyAllWindows();
+
+	DeleteCriticalSection(&m_criticalSection);
 }
 
 void TestDialog::DoDataExchange(CDataExchange* pDX)
@@ -242,12 +245,14 @@ BOOL TestDialog::OnInitDialog()
 	if (!m_videoCapture.set(cv::CAP_PROP_FRAME_WIDTH, defaultFrameWidth))
 	{
 		MessageBox(_T("Не удалось задать ширину кадра камеры!"));
+
 		return FALSE;
 	}
 
 	if (!m_videoCapture.set(cv::CAP_PROP_FRAME_HEIGHT, defaultFrameHeight))
 	{
 		MessageBox(_T("Не удалось задать высоту кадра камеры!"));
+
 		return FALSE;
 	}
 
@@ -299,10 +304,13 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 	while (!dlg->m_stopThread && dlg->m_videoCapture.isOpened()) 
 	{
 		cv::Mat tempFrame;
+
+		EnterCriticalSection(&dlg->m_criticalSection);
+		dlg->m_videoCapture >> tempFrame;
+		LeaveCriticalSection(&dlg->m_criticalSection);
+
 		cv::Size targetSize(dlg->m_resizeFrameWidth, dlg->m_resizeFrameHeight);
 		cv::Mat resizedFrame;
-
-		dlg->m_videoCapture >> tempFrame;
 
 		if (tempFrame.empty())
 		{
@@ -323,7 +331,7 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		cv::resize(tempFrame, resizedFrame, cv::Size(newWidth, newHeight), 0, 0, cv::INTER_LINEAR);
 
 		// Создаем рамку (letterbox)
-		cv::Mat letterboxFrame(targetSize, tempFrame.type(), cv::Scalar(0, 255, 255));
+		cv::Mat letterboxFrame(targetSize, tempFrame.type(), cv::Scalar(255, 255, 0));
 
 		int xOffset = (targetSize.width - newWidth) / 2;
 		int yOffset = (targetSize.height - newHeight) / 2;
@@ -378,7 +386,8 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 
 		if (!dlg->m_isDrawing) 
 		{
-			dlg->m_rectFrame = finalFiltered.clone();
+			//dlg->m_rectFrame = finalFiltered.clone();
+			dlg->m_rectFrame = dlg->m_currentFrame;
 		}
 
 		if (!dlg->m_rectFrame.empty()) 
@@ -415,7 +424,7 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 			, SWP_NOZORDER);
 
 		delete rect;
-		//rect = nullptr;
+		rect = nullptr;
 	}
 
 	return 0;
@@ -504,7 +513,7 @@ void TestDialog::SetCursorCoords(int x, int y)
 
 void TestDialog::OnBnClickedButtonStopVideo()
 {
-	//m_stopThread = true;
+	m_stopThread = true;
 	m_videoCapture.release();
 }
 
@@ -608,9 +617,9 @@ void TestDialog::OnBnClickedCheckMakeGray()
 
 void TestDialog::OnBnClickedButtonTestCompareFrames()
 {
+	// TODO: find optimal params for AKAZE
+	// TODO: add fields to modify AKAZE params
 	int imgReadMode = cv::IMREAD_GRAYSCALE;						// IMREAD_COLOR by default
-
-	EnterCriticalSection(&m_criticalSection);
 
 	if (!cv::imwrite(imgCompareFrameName, m_currentFrame))
 	{
@@ -620,23 +629,17 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	cv::Mat image = cv::imread(imgCompareFrameName, imgReadMode);
 	cv::Mat templateImage = cv::imread(imgRoiName, imgReadMode);
 
-	LeaveCriticalSection(&m_criticalSection);
-
 	if (image.empty()) 
 	{
 		std::cerr << "Ошибка загрузки изображения" << std::endl;
 		return;
 	}
 
-	//cv::cvtColor(image, image, cv::COLOR_BGR2GRAY, 1);
-
 	if (templateImage.empty())
 	{
 		std::cerr << "Ошибка загрузки шаблона" << std::endl;
 		return;
 	}
-
-	//cv::cvtColor(templateImage, templateImage, cv::COLOR_BGR2GRAY, 1);
 
 	cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
 
@@ -646,9 +649,9 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		return;
 	}
 
-	akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек
-	akaze->setNOctaves(4);                                  // Количество октав (уровней пирамиды)
-	akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве
+	akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек (0.001f - default)
+	akaze->setNOctaves(3);                                  // Количество октав (уровней пирамиды, баланс скорости и точности)
+	akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве	(детализация)
 	akaze->setDescriptorSize(0);                            // Размер дескриптора (по умолчанию максимальный)
 	akaze->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);   // Тип дескриптора
 
@@ -660,13 +663,13 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	cv::Ptr<cv::ORB> orb = cv::ORB::create(
 		500,					// Максимальное количество ключевых точек
 		1.2f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
-		8,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
-		31,						// Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
+		10,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
+		10,						// Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
 		0,						// Первый уровень пирамиды
 		2,						// WTA_K - параметр определяет количество точек в окрестности ключевой точки, которые сравниваются для генерации одного бита дескриптора
-		cv::ORB::HARRIS_SCORE,	// Метод оценки
-		31,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
-		20						// Порог отклика -  это численная величина, характеризующая "выразительность" точки
+		cv::ORB::FAST_SCORE,	// Метод оценки
+		18,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
+		50						// Порог отклика -  это численная величина, характеризующая "выразительность" точки
 	);
 
 	if (orb.empty())
@@ -707,9 +710,17 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		std::cout << "Диапазон значений templateImage: [" << minVal << ", " << maxVal << "]\n";
 	}
 
+	clock_t start = clock();
 	akaze->detectAndCompute(image, emptyMask, keypointsImage, descriptorsImage);
+	clock_t end = clock();
+	double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
+	TRACE(">===== AKAZE time for image: %.6f sec\n", time_spent);
 
+	start = clock();
 	akaze->detectAndCompute(templateImage, emptyMask, keypointsTemplate, descriptorsTemplate);
+	end = clock();
+	time_spent = (double)(end - start) / CLOCKS_PER_SEC;
+	TRACE(">===== AKAZE time for template image: %.6f sec\n", time_spent);
 
 	if (keypointsImage.empty() || keypointsTemplate.empty()) 
 	{
@@ -723,21 +734,21 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		return;
 	}
 
-	//orb->detectAndCompute(image, emptyMask, keypointsImageOrb, descriptorsImageOrb);
-	//orb->detectAndCompute(templateImage, emptyMask, keypointsTemplateOrb, descriptorsTemplateOrb);
+	orb->detectAndCompute(image, emptyMask, keypointsImageOrb, descriptorsImageOrb);
+	orb->detectAndCompute(templateImage, emptyMask, keypointsTemplateOrb, descriptorsTemplateOrb);
 
 
-	//if (keypointsImageOrb.empty() || keypointsTemplateOrb.empty())
-	//{
-	//	std::cerr << "Ошибка: недостаточно ключевых точек для сопоставления" << std::endl;
-	//	return;
-	//}
+	if (keypointsImageOrb.empty() || keypointsTemplateOrb.empty())
+	{
+		std::cerr << "Ошибка: недостаточно ключевых точек для сопоставления" << std::endl;
+		return;
+	}
 
-	//if (descriptorsImageOrb.empty() || descriptorsTemplateOrb.empty())
-	//{
-	//	std::cerr << "Ошибка: дескрипторы не созданы" << std::endl;
-	//	return;
-	//}
+	if (descriptorsImageOrb.empty() || descriptorsTemplateOrb.empty())
+	{
+		std::cerr << "Ошибка: дескрипторы не созданы" << std::endl;
+		return;
+	}
 
 	// Сопоставление дескрипторов (Brute-Force)
 	cv::BFMatcher matcher(cv::NORM_HAMMING, true);
@@ -750,13 +761,13 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		, matches.end()
 		, [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; } );
 
-	//std::vector<cv::DMatch> matchesOrb;
+	std::vector<cv::DMatch> matchesOrb;
 
-	//matcher.match(descriptorsTemplateOrb, descriptorsImageOrb, matchesOrb);
-	//std::sort(
-	//	matchesOrb.begin()
-	//	, matchesOrb.end()
-	//	, [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; });
+	matcher.match(descriptorsTemplateOrb, descriptorsImageOrb, matchesOrb);
+	std::sort(
+		matchesOrb.begin()
+		, matchesOrb.end()
+		, [](const cv::DMatch& a, const cv::DMatch& b) { return a.distance < b.distance; });
 
 	// Фильтрация совпадений
 	const double maxDistance = 50.0; // Порог расстояния для фильтрации (50.0)
@@ -777,20 +788,20 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		}
 	}
 
-	//std::vector<cv::DMatch> goodMatchesOrb;
-	//for (size_t i = 0; i < matchesOrb.size(); i++)
-	//{
-	//	if (matchesOrb[i].queryIdx >= keypointsTemplateOrb.size() || 
-	//		matchesOrb[i].trainIdx >= keypointsImageOrb.size()) 
-	//	{
-	//		continue; // Пропустить некорректные совпадения
-	//	}
+	std::vector<cv::DMatch> goodMatchesOrb;
+	for (size_t i = 0; i < matchesOrb.size(); i++)
+	{
+		if (matchesOrb[i].queryIdx >= keypointsTemplateOrb.size() || 
+			matchesOrb[i].trainIdx >= keypointsImageOrb.size()) 
+		{
+			continue; // Пропустить некорректные совпадения
+		}
 
-	//	if (matchesOrb[i].distance < maxDistance)
-	//	{
-	//		goodMatchesOrb.push_back(matchesOrb[i]);
-	//	}
-	//}
+		if (matchesOrb[i].distance < maxDistance)
+		{
+			goodMatchesOrb.push_back(matchesOrb[i]);
+		}
+	}
 
 	// Рассчёт процента совпадения
 
@@ -802,12 +813,12 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	TRACE("Количество хороших совпадений AKAZE: %d\n", tempAkazeSize);
 	TRACE("Процент совпадения AKAZE: %f\n", matchPercentage);
 
-	//double matchPercentageOrb = (double)goodMatchesOrb.size() / keypointsTemplateOrb.size() * 100.0;
-	//TRACE("\n======= ORB =======\n\n");
-	//TRACE("Найдено совпадений ORB: %d\n", matchesOrb.size());
-	//TRACE("Общее количество ключевых точек в шаблоне ORB: %d\n", keypointsTemplateOrb.size());
-	//TRACE("Количество хороших совпадений ORB: %d\n", goodMatchesOrb.size());
-	//TRACE("Процент совпадения ORB: %f\n", matchPercentageOrb);
+	double matchPercentageOrb = (double)goodMatchesOrb.size() / keypointsTemplateOrb.size() * 100.0;
+	TRACE("\n======= ORB =======\n\n");
+	TRACE("Найдено совпадений ORB: %d\n", matchesOrb.size());
+	TRACE("Общее количество ключевых точек в шаблоне ORB: %d\n", keypointsTemplateOrb.size());
+	TRACE("Количество хороших совпадений ORB: %d\n", goodMatchesOrb.size());
+	TRACE("Процент совпадения ORB: %f\n", matchPercentageOrb);
 
 	// Визуализация совпадений
 	cv::Mat matchedImage;
@@ -824,219 +835,35 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		, std::vector<char>()
 		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
-	//cv::Mat matchedImageOrb;
-	//cv::drawMatches(
-	//	templateImage
-	//	, keypointsTemplateOrb
-	//	, image
-	//	, keypointsImageOrb
-	//	, goodMatchesOrb
-	//	, matchedImageOrb
-	//	, cv::Scalar::all(-1)
-	//	, cv::Scalar::all(-1)
-	//	, std::vector<char>()
-	//	, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+	cv::Mat matchedImageOrb;
+	cv::drawMatches(
+		templateImage
+		, keypointsTemplateOrb
+		, image
+		, keypointsImageOrb
+		, goodMatchesOrb
+		, matchedImageOrb
+		, cv::Scalar::all(-1)
+		, cv::Scalar::all(-1)
+		, std::vector<char>()
+		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
 	// Показ результата
-	cv::imshow("Matched Keypoints AKAZE", matchedImage);
-	/*cv::imshow("Matched Keypoints ORB", matchedImageOrb);*/
+	const std::string tempWndNameAkaze = "Matched Keypoints AKAZE";
+	const std::string tempWndNameOrb = "Matched Keypoints ORB";
 
+	cv::imshow(tempWndNameAkaze.c_str(), matchedImage);
+	cv::imshow(tempWndNameOrb.c_str(), matchedImageOrb);
 
+	for (;;)
+	{
+		int key = cv::waitKey(0);
 
-
-
-	//// Преобразуем выбранные точки в KeyPoint для дальнейшего использования
-	//std::vector<cv::KeyPoint> templateKeypoints, mainImgKeypoints;
-	//cv::Mat templateDescriptors, mainImgDescriptors;
-
-	//int imgReadMode = cv::IMREAD_GRAYSCALE;
-	//cv::Mat templateImg = cv::imread(imgRoiName, imgReadMode);
-	//cv::Mat mainImg = m_currentFrame.clone();
-
-	//int keypoints = 500;
-	//float scaleFactor = 1.2f;
-	//int pyramidLevels = 10;
-	//int windowSize = 10;
-	//int wtakPoints = 2;
-	//int patchSize = 18;
-	//int fastThreshold = 50;
-
-	//cv::Ptr<cv::ORB> orb = cv::ORB::create(
-	//	keypoints,			        // Максимальное количество ключевых точек
-	//	1.2f,						// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
-	//	scaleFactor,				// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
-	//	pyramidLevels,				// Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
-	//	0,							// Первый уровень пирамиды
-	//	wtakPoints,					// WTA_K - параметр определяет количество точек в окрестности ключевой точки, которые сравниваются для генерации одного бита дескриптора
-	//	cv::ORB::FAST_SCORE,		// Метод оценки
-	//	patchSize,					// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
-	//	fastThreshold				// Порог отклика -  это численная величина, характеризующая "выразительность" точки
-	//	);
-
-
-	//cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
-	//akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек
-	//akaze->setNOctaves(4);                                  // Количество октав (уровней пирамиды)
-	//akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве
-	//akaze->setDescriptorSize(0);                            // Размер дескриптора (по умолчанию максимальный)
-	//akaze->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);   // Тип дескриптора
-
-	//try
-	//{
-	//	orb->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
-	//	//akaze->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
-
-	//	if (templateKeypoints.empty())
-	//	{
-	//		std::cerr << "Ошибка: массив ключевых точек templateKeypoints пуст!\n";
-	//		return;
-	//	}
-	//}
-	//catch (const std::exception& e)
-	//{
-	//	std::cerr << "Исключение: " << e.what() << "\n";
-	//}
-
-	//try
-	//{
-	//	orb->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
-	//	//akaze->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
-
-	//	if (mainImgKeypoints.empty())
-	//	{
-	//		std::cerr << "Ошибка: массив ключевых точек mainImgKeypoints пуст!\n";
-	//		return;
-	//	}
-	//}
-	//catch (const std::exception& e)
-	//{
-	//	std::cerr << "Исключение: " << e.what() << "\n";
-	//}
-
-	//// Визуализация ключевых точек, найденных по алгоритму
-	//cv::Mat templateImgFoundKeypoints;
-
-	//cv::drawKeypoints(
-	//	templateImg
-	//	, templateKeypoints
-	//	, templateImgFoundKeypoints
-	//	, cv::Scalar(0, 0, 255)
-	//	, cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-
-	//cv::imshow("Found keypoints on template image", templateImgFoundKeypoints);
-
-	//// Сортировка совпадений по расстоянию
-	//cv::BFMatcher matcher(cv::NORM_HAMMING, true);
-	//std::vector<cv::DMatch> matches;
-	//matcher.match(templateDescriptors, mainImgDescriptors, matches);
-
-	//std::sort(
-	//	matches.begin()
-	//	, matches.end()
-	//	, [](const cv::DMatch& a, const cv::DMatch& b) { 
-	//		return a.distance < b.distance; 
-	//});
-
-	//std::vector<cv::DMatch> goodMatches;
-
-	//// Фильтрация совпадений
-	//const double maxDistance = 50.0; // Порог расстояния для фильтрации по расстоянию
-
-	//for (int i = 0; i < matches.size(); i++)
-	//{
-	//	if (matches[i].distance < maxDistance)
-	//	{
-	//		goodMatches.push_back(matches[i]);
-	//	}
-	//}
-
-	//// Сортировка совпадений по Lowe's Ratio Test
-	//// Lowe's Ratio Test проверяет, 
-	//// является ли расстояние до лучшего совпадения 
-	//// существенно меньше расстояния до второго ближайшего совпадения
-	//cv::BFMatcher knnMatcher(cv::NORM_HAMMING);
-	//std::vector<std::vector<cv::DMatch>> knnMatches;
-	//knnMatcher.knnMatch(templateDescriptors, mainImgDescriptors, knnMatches, 2);
-
-	//// Если отношение расстояний меньше заданного порога 
-	//// (обычно 0.7 или 0.75), совпадение считается хорошим
-	//const float ratioThresh = 0.8f; // 0.7f - default
-
-	//std::vector<cv::DMatch> goodMatchesKnn;
-
-	//for (int i = 0; i < knnMatches.size(); i++)
-	//{
-	//	// Проверяем, есть ли хотя бы два совпадения
-	//	if (knnMatches[i].size() >= 2) 
-	//	{ 
-	//		const cv::DMatch& bestMatch = knnMatches[i][0];
-	//		const cv::DMatch& secondBestMatch = knnMatches[i][1];
-
-	//		// Проверяем индексы на соответствие массивам ключевых точек
-	//		if (bestMatch.queryIdx >= 0 
-	//			&& bestMatch.queryIdx < templateKeypoints.size() 
-	//			&& bestMatch.trainIdx >= 0 
-	//			&& bestMatch.trainIdx < mainImgKeypoints.size()) 
-	//		{
-	//			if (bestMatch.distance < ratioThresh * secondBestMatch.distance)
-	//			{
-	//				goodMatchesKnn.push_back(bestMatch);
-	//			}
-	//		}
-	//	}
-	//}
-
-	//int debugSizeKnn = goodMatchesKnn.size();
-	//int debugKeypoints1Size = templateKeypoints.size();
-	//int debugKeypoints2Size = mainImgKeypoints.size();
-	//int debugSizeDistance = goodMatches.size();
-
-	//// Визуализация совпадений
-	//cv::Mat matchedImage, matchedImageKnn;
-
-	//cv::drawMatches(
-	//	templateImg
-	//	, templateKeypoints
-	//	, mainImg
-	//	, mainImgKeypoints
-	//	, goodMatches
-	//	, matchedImage
-	//	, cv::Scalar::all(-1)
-	//	, cv::Scalar::all(-1)
-	//	, std::vector<char>()
-	//	, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
-	//cv::imshow("Matched Keypoints ORB (Distance)", matchedImage);
-
-	////double matchPercentage = (double)goodMatches.size() / (double)templateKeypoints.size() * 100.0;
-
-	//double matchPercentage = (double)goodMatches.size() / (double)mainImgKeypoints.size() * 100.0;
-
-	//std::cout << "Общее количество ключевых точек в шаблоне: " << templateKeypoints.size() << "\n";
-	//std::cout << "Общее количество ключевых точек в сравниваемом изображении: " << mainImgKeypoints.size() << "\n";
-	//std::cout << "Найдено совпадений (фильтрация по расстоянию): " << matches.size() << "\n";
-	//std::cout << "Количество хороших совпадений: " << goodMatches.size() << "\n";
-	//std::cout << "Процент совпадения: " << matchPercentage << "%" << "\n";
-
-	//cv::drawMatches(
-	//	templateImg
-	//	, templateKeypoints
-	//	, mainImg
-	//	, mainImgKeypoints
-	//	, goodMatchesKnn
-	//	, matchedImageKnn
-	//	, cv::Scalar::all(-1)
-	//	, cv::Scalar::all(-1)
-	//	, std::vector<char>()
-	//	, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-
-	//cv::imshow("Matched Keypoints ORB (KNN)", matchedImageKnn);
-
-	////double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)templateKeypoints.size() * 100.0;
-
-	//double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)mainImgKeypoints.size() * 100.0;
-
-	//std::cout << "Найдено совпадений (фильтрация по KNN): " << knnMatches.size() << "\n";
-	//std::cout << "Количество хороших совпадений: " << goodMatchesKnn.size() << "\n";
-	//std::cout << "Процент совпадения: " << matchPercentageKnn << "%" << "\n";
+		// Окно закрыто по любой клавише
+		if (key >= 0) 
+		{
+			cv::destroyWindow(tempWndNameAkaze.c_str());
+			cv::destroyWindow(tempWndNameOrb.c_str());
+		}
+	}
 }
