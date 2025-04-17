@@ -4,6 +4,8 @@
 #include <afxwin.h>
 #include <windows.h>
 #include <memory>
+#include "OrbMatcher.h"
+#include "AkazeMatcher.h"
 
 // TestDialog dialog
 
@@ -61,6 +63,9 @@ private:
 	cv::Point m_endPoint;               // Конец прямоугольника
 	CWinThread* m_videoThread;          // Поток для обработки захвата видео
 
+	AkazeMatcher* m_akazeMatcher;
+	OrbMatcher* m_orbMatcher;
+
 	static UINT VideoThread(LPVOID pParam);
 	static void MouseCallback(int event, int x, int y, int flags, void* userdata);
 
@@ -94,7 +99,25 @@ public:
 	afx_msg void OnBnClickedCheckApplyCanny();
 	afx_msg void OnBnClickedCheckApplyGaussian();
 	afx_msg void OnBnClickedCheckApplyClahe();
-	BOOL m_makeGray;
 	afx_msg void OnBnClickedCheckMakeGray();
 	afx_msg void OnBnClickedButtonTestCompareFrames();
+	afx_msg void OnEnKillfocusEditFloat();
+
+	BOOL m_makeGray;
+	float m_akazeThreshold;
+	int m_akazeNumberOctaves;
+	int m_akazeNumberOctaveLayers;
+	int m_akazeDescriptorChannels;
+	int m_akazeDescriptorType;
+
+private:
+	CComboBox m_comboBoxAkazeDescriptorTypes;
+public:
+	afx_msg void OnEnKillfocusEditAkazeNumberOctaves();
+	afx_msg void OnEnKillfocusEditAkazeNumberOctaveLayers();
+	afx_msg void OnBnClickedRadioAkazeChannels1();
+	afx_msg void OnBnClickedRadioAkazeChannels2();
+	afx_msg void OnBnClickedRadioAkazeChannels3();
+	afx_msg void OnEnUpdateEditAkazeThreshold();
+	afx_msg void OnCbnSelchangeComboAkazeDescriptorTypes();
 };

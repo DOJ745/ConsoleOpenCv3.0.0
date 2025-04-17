@@ -1,6 +1,28 @@
 #pragma once
 #include "FeatureMatcher.h"
 
+/*
+	–екомендуемые параметры:
+
+	- nFeatures Ч сколько фичей искать (чем больше, тем дольше).
+
+	- scaleFactor Ч масштаб между уровн€ми пирамиды (1.2 Ч ок).
+
+	- nLevels Ч уровни масштабов (больше Ч более устойчиво, но медленно).
+
+	- edgeThreshold Ч отступ от границы изображени€ (чтобы фичи не упирались в кра€).
+
+	- firstLevel Ч с какого уровн€ начинать.
+
+	- WTA_K Ч сколько точек участвует в тесте BRIEF (2 или 4, больше Ч точнее, но медленнее).
+
+	- scoreType Ч метод оценки: HARRIS_SCORE (устойчивее), FAST_SCORE (быстрее).
+
+	- patchSize Ч размер патча вокруг точки.
+
+	- fastThreshold Ч порог FAST-детектора (меньше Ч больше фичей).
+*/
+
 class OrbMatcher : public FeatureMatcher
 {
 private:
@@ -16,29 +38,32 @@ private:
 	int m_fastThreshold;
 
 protected:
-	void detectAndComputeCurrent() override
+	void detectAndComputeMainImg() override
 	{
 		cv::Mat emptyMask;
 		clock_t start = clock();
-		m_orb->detectAndCompute(m_currentImage, emptyMask, m_keypointsCurrent, m_descriptorsCurrent);
+		m_orb->detectAndCompute(m_mainImage, emptyMask, m_keypointsMainImg, m_descriptorsMainImg);
 		clock_t end = clock();
 
 		double time = (double)(end - start) / CLOCKS_PER_SEC;
-		TRACE("ORB Detection time CURRENT: %.6f sec\n", time);
+		TRACE("ORB Detection time MAIN IMG: %.6f sec\n", time);
 	}
 
-	void detectAndComputeTemplate() override
+	void detectAndComputeCompareImg() override
 	{
 		cv::Mat emptyMask;
 		clock_t start = clock();
-		m_orb->detectAndCompute(m_templateImage, emptyMask, m_keypointsTemplate, m_descriptorsTemplate);
+		m_orb->detectAndCompute(m_compareImage, emptyMask, m_keypointsCompareImg, m_descriptorsCompareImg);
 		clock_t end = clock();
 
 		double time = (double)(end - start) / CLOCKS_PER_SEC;
-		TRACE("ORB Detection time TEMPLATE: %.6f sec\n", time);
+		TRACE("ORB Detection time COMPARE IMG: %.6f sec\n", time);
 	}
 
 public:
+	OrbMatcher(): FeatureMatcher(), m_orb(cv::ORB::create())
+	{
+	};
 
 	OrbMatcher(const std::string& templatePath, const std::string& currentPath, double distance)
 		: FeatureMatcher(templatePath, currentPath, distance), m_orb(cv::ORB::create())
@@ -148,15 +173,15 @@ public:
 
 	void detectAndComputeAll()
 	{
-		detectAndComputeCurrent();
-		detectAndComputeTemplate();
+		detectAndComputeMainImg();
+		detectAndComputeCompareImg();
 	};
 
 	void performAll()
 	{
 		createDetector();
-		detectAndComputeCurrent();
-		detectAndComputeTemplate();
+		detectAndComputeMainImg();
+		detectAndComputeCompareImg();
 		matchFeatures();
 		visualizeMatches();
 		TRACE("ORB match percentage: %.2f%%\n", calculateMatchPercentage());
@@ -166,6 +191,7 @@ public:
 
 	virtual ~OrbMatcher(void)
 	{
+		TRACE("======>[ORB] destroying object...\n");
 	};
 };
 

@@ -9,23 +9,34 @@
 class FeatureMatcher
 {
 protected:
-	cv::Mat m_templateImage;
-	cv::Mat m_currentImage;
-	std::vector<cv::KeyPoint> m_keypointsTemplate;
-	std::vector<cv::KeyPoint> m_keypointsCurrent;
-	cv::Mat m_descriptorsTemplate;
-	cv::Mat m_descriptorsCurrent;
+	cv::Mat m_compareImage;
+	cv::Mat m_mainImage;
+	std::vector<cv::KeyPoint> m_keypointsCompareImg;
+	std::vector<cv::KeyPoint> m_keypointsMainImg;
+	cv::Mat m_descriptorsCompareImg;
+	cv::Mat m_descriptorsMainImg;
 	double m_maxDistance;
 	std::vector<cv::DMatch> m_matches;
 	std::vector<cv::DMatch> m_goodMatches;
 	cv::Mat m_resultImage;
 	std::string m_windowName;
 
+	void normalizeMainImage();
+	void normalizeCompareImage();
 	void normalizeImages();
-	virtual void detectAndComputeCurrent() = 0;
-	virtual void detectAndComputeTemplate() = 0;
+	virtual void detectAndComputeMainImg() = 0;
+	virtual void detectAndComputeCompareImg() = 0;
 
 public:
+	FeatureMatcher()
+		: m_compareImage(cv::Mat::zeros(480, 640, CV_8UC3))
+		, m_mainImage(cv::Mat::zeros(480, 640, CV_8UC3))
+		, m_resultImage(cv::Mat::zeros(480, 640, CV_8UC3))
+	{
+		TRACE("======>[FeatureMatcher] empty constructor\n");
+	};
+
+
 	FeatureMatcher(const std::string& templatePath
 		, const std::string& currentPath
 		, double distance);
@@ -35,8 +46,15 @@ public:
 	virtual void visualizeMatches();
 	double calculateMatchPercentage() const;
 	void showResult();
+	void loadMainImage(const std::string& filename);
+	void loadCompareImage(const std::string& filename);
 
 	virtual void performAll() = 0;
+
+	void setMaxDistance(int value)
+	{
+		m_maxDistance = value;
+	}
 
 	void setWindowName(const std::string& windowName)
 	{

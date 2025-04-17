@@ -5,8 +5,6 @@
 #include "OpenCvWithMFC.h"
 #include "TestDialog.h"
 #include "afxdialogex.h"
-#include "OrbMatcher.h"
-#include "AkazeMatcher.h"
 
 // Space in name impacts the window style
 const std::string OPEN_CV_WINDOW_NAME = "OpenCVWindow";
@@ -148,6 +146,12 @@ TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 	, m_applyGaussian(FALSE)
 	, m_applyClahe(FALSE)
 	, m_makeGray(FALSE)
+	, m_akazeThreshold(0.001f)
+	, m_akazeNumberOctaves(3)
+	, m_akazeNumberOctaveLayers(4)
+	, m_akazeMatcher(nullptr)
+	, m_orbMatcher(nullptr)
+	, m_akazeDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB)
 {
 	  InitializeCriticalSection(&m_criticalSection);
 }
@@ -161,8 +165,6 @@ TestDialog::~TestDialog()
 		WaitForSingleObject(m_videoThread->m_hThread, INFINITE);
 	}
 
-	//DeleteCriticalSection(&m_criticalSection);
-
 	if (m_videoCapture.isOpened())
 	{
 		m_videoCapture.release();
@@ -174,6 +176,18 @@ TestDialog::~TestDialog()
 	cv::destroyAllWindows();
 
 	DeleteCriticalSection(&m_criticalSection);
+
+	if (m_akazeMatcher)
+	{
+		delete m_akazeMatcher;
+		m_akazeMatcher = nullptr;
+	}
+
+	if (m_orbMatcher)
+	{
+		delete m_orbMatcher;
+		m_orbMatcher = nullptr;
+	}
 }
 
 void TestDialog::DoDataExchange(CDataExchange* pDX)
@@ -204,6 +218,13 @@ void TestDialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Check(pDX, IDC_CHECK_TEST_APPLY_GAUSSIAN, m_applyGaussian);
 	DDX_Check(pDX, IDC_CHECK_TEST_APPLY_CLAHE, m_applyClahe);
 	DDX_Check(pDX, IDC_CHECK_MAKE_GRAY, m_makeGray);
+	DDX_Text(pDX, IDC_EDIT_AKAZE_THRESHOLD, m_akazeThreshold);
+	DDV_MinMaxFloat(pDX, m_akazeThreshold, 0, 1);
+	DDX_Text(pDX, IDC_EDIT_AKAZE_NUMBER_OCTAVES, m_akazeNumberOctaves);
+	DDV_MinMaxInt(pDX, m_akazeNumberOctaves, 1, 10);
+	DDX_Text(pDX, IDC_EDIT_AKAZE_NUMBER_OCTAVE_LAYERS, m_akazeNumberOctaveLayers);
+	DDV_MinMaxInt(pDX, m_akazeNumberOctaveLayers, 1, 10);
+	DDX_Control(pDX, IDC_COMBO_AKAZE_DESCRIPTOR_TYPES, m_comboBoxAkazeDescriptorTypes);
 }
 
 BOOL TestDialog::OnInitDialog()
@@ -269,6 +290,19 @@ BOOL TestDialog::OnInitDialog()
 		return FALSE;
 	}
 
+	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_KAZE_UPRIGHT");
+	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_KAZE");
+	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_MLDB_UPRIGHT");
+	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_MLDB");
+
+	m_comboBoxAkazeDescriptorTypes.SetCurSel(0);
+
+	m_akazeMatcher = new AkazeMatcher();
+	m_orbMatcher = new OrbMatcher();
+
+	// IMPORTANT: OpenCV create as many threads as you have cores in your CPU
+	//cv::setNumThreads(0);
+
 	return TRUE;
 }
 
@@ -292,6 +326,14 @@ BEGIN_MESSAGE_MAP(TestDialog, CDialogEx)
 	ON_BN_CLICKED(IDC_CHECK_TEST_APPLY_CLAHE, &TestDialog::OnBnClickedCheckApplyClahe)
 	ON_BN_CLICKED(IDC_CHECK_MAKE_GRAY, &TestDialog::OnBnClickedCheckMakeGray)
 	ON_BN_CLICKED(IDC_BUTTON_TEST_COMPARE_FRAMES, &TestDialog::OnBnClickedButtonTestCompareFrames)
+	ON_EN_KILLFOCUS(IDC_EDIT_AKAZE_THRESHOLD, &TestDialog::OnEnKillfocusEditFloat)
+	ON_EN_KILLFOCUS(IDC_EDIT_AKAZE_NUMBER_OCTAVES, &TestDialog::OnEnKillfocusEditAkazeNumberOctaves)
+	ON_EN_KILLFOCUS(IDC_EDIT_AKAZE_NUMBER_OCTAVE_LAYERS, &TestDialog::OnEnKillfocusEditAkazeNumberOctaveLayers)
+	ON_BN_CLICKED(IDC_RADIO_AKAZE_CHANNELS_1, &TestDialog::OnBnClickedRadioAkazeChannels1)
+	ON_BN_CLICKED(IDC_RADIO_AKAZE_CHANNELS_2, &TestDialog::OnBnClickedRadioAkazeChannels2)
+	ON_BN_CLICKED(IDC_RADIO_AKAZE_CHANNELS_3, &TestDialog::OnBnClickedRadioAkazeChannels3)
+	ON_EN_UPDATE(IDC_EDIT_AKAZE_THRESHOLD, &TestDialog::OnEnUpdateEditAkazeThreshold)
+	ON_CBN_SELCHANGE(IDC_COMBO_AKAZE_DESCRIPTOR_TYPES, &TestDialog::OnCbnSelchangeComboAkazeDescriptorTypes)
 END_MESSAGE_MAP()
 
 
@@ -388,7 +430,7 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		if (!dlg->m_isDrawing) 
 		{
 			//dlg->m_rectFrame = finalFiltered.clone();
-			dlg->m_rectFrame = dlg->m_currentFrame;
+			dlg->m_rectFrame = dlg->m_currentFrame.clone();
 		}
 
 		if (!dlg->m_rectFrame.empty()) 
@@ -481,6 +523,8 @@ void TestDialog::MouseCallback(int event, int x, int y, int flags, void* userdat
 			// Min задаёт верхний левый угол прямоугольника
 			int x1 = std::min(dlg->m_startPoint.x, dlg->m_endPoint.x);
 			int y1 = std::min(dlg->m_startPoint.y, dlg->m_endPoint.y);
+
+			// Max задаёт нижний правый соответственно
 			int x2 = std::max(dlg->m_startPoint.x, dlg->m_endPoint.x);
 			int y2 = std::max(dlg->m_startPoint.y, dlg->m_endPoint.y);
 
@@ -619,8 +663,8 @@ void TestDialog::OnBnClickedCheckMakeGray()
 void TestDialog::OnBnClickedButtonTestCompareFrames()
 {
 	const double maxDistance = 50.0;
-	std::string templatePath = IMG_ROI_NAME;
-	std::string currentPath = IMG_COMPARE_FRAME_NAME;
+	std::string compareImgPath = IMG_ROI_NAME;
+	std::string mainImgPath = IMG_COMPARE_FRAME_NAME;
 
 	// Сохраняем текущий кадр для сравнения
 	if (!cv::imwrite(IMG_COMPARE_FRAME_NAME, m_currentFrame))
@@ -628,11 +672,17 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		return;
 	}
 
-	OrbMatcher orbMatcher(templatePath, currentPath, maxDistance);
-	AkazeMatcher akazeMatcher(templatePath, currentPath, maxDistance);
+	m_orbMatcher->setMaxDistance(maxDistance);
+	m_akazeMatcher->setMaxDistance(maxDistance);
 
-	orbMatcher.performAll();
-	akazeMatcher.performAll();
+	m_orbMatcher->loadMainImage(mainImgPath);
+	m_orbMatcher->loadCompareImage(compareImgPath);
+
+	m_akazeMatcher->loadMainImage(mainImgPath);
+	m_akazeMatcher->loadCompareImage(compareImgPath);
+
+	m_orbMatcher->performAll();
+	m_akazeMatcher->performAll();
 
 	for (;;)
 	{
@@ -641,8 +691,74 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		// Окно закрыто по любой клавише
 		if (key >= 0) 
 		{
-			orbMatcher.destroyWindow();
-			akazeMatcher.destroyWindow();
+			m_orbMatcher->destroyWindow();
+			m_orbMatcher->destroyWindow();
 		}
+	}
+}
+
+
+void TestDialog::OnEnKillfocusEditFloat()
+{
+	UpdateData(TRUE);
+	TRACE("======>[TEST] FLOAT VALUE: %.3f\n", m_akazeThreshold);
+}
+
+
+void TestDialog::OnEnKillfocusEditAkazeNumberOctaves()
+{
+	UpdateData(TRUE);
+}
+
+
+void TestDialog::OnEnKillfocusEditAkazeNumberOctaveLayers()
+{
+	UpdateData(TRUE);
+}
+
+
+void TestDialog::OnBnClickedRadioAkazeChannels1()
+{
+	m_akazeMatcher->setDescriptorChannels(GetDlgItemInt(IDC_RADIO_AKAZE_CHANNELS_1));
+}
+
+
+void TestDialog::OnBnClickedRadioAkazeChannels2()
+{
+	m_akazeMatcher->setDescriptorChannels(GetDlgItemInt(IDC_RADIO_AKAZE_CHANNELS_2));
+}
+
+
+void TestDialog::OnBnClickedRadioAkazeChannels3()
+{
+	m_akazeMatcher->setDescriptorChannels(GetDlgItemInt(IDC_RADIO_AKAZE_CHANNELS_3));
+}
+
+
+void TestDialog::OnEnUpdateEditAkazeThreshold()
+{
+	CString tempValue;
+	GetDlgItemText(IDC_EDIT_AKAZE_THRESHOLD, tempValue);
+
+	m_akazeMatcher->setThreshold(_ttof(tempValue));
+}
+
+
+void TestDialog::OnCbnSelchangeComboAkazeDescriptorTypes()
+{
+	switch(m_comboBoxAkazeDescriptorTypes.GetCurSel())
+	{
+	case 0:
+		m_akazeMatcher->setDescriptorType(cv::AKAZE::DESCRIPTOR_KAZE_UPRIGHT);
+		break;
+	case 1:
+		m_akazeMatcher->setDescriptorType(cv::AKAZE::DESCRIPTOR_KAZE);
+		break;
+	case 2:
+		m_akazeMatcher->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB_UPRIGHT);
+		break;
+	case 3:
+		m_akazeMatcher->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);
+		break;
 	}
 }
