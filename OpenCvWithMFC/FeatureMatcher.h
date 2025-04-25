@@ -18,6 +18,8 @@ protected:
 	double m_maxDistance;
 	std::vector<cv::DMatch> m_matches;
 	std::vector<cv::DMatch> m_goodMatches;
+	std::vector<cv::DMatch> m_crossCheckedMatches;
+	std::vector<std::vector<cv::DMatch>> m_knnMatches;
 	cv::Mat m_resultImage;
 	std::string m_windowName;
 
@@ -42,14 +44,20 @@ public:
 		, double distance);
 
 	virtual ~FeatureMatcher(void) = 0;
-	virtual void matchFeatures();
 	virtual void visualizeMatches();
+	virtual void visualizeMatchesCrossCheck();
+	virtual void matchFeaturesDistance();
+	virtual void matchFeaturesLowe() = 0;
+	virtual void matchFeaturesCrossCheck();
+	
 	double calculateMatchPercentage() const;
 	void showResult();
 	void loadMainImage(const std::string& filename);
 	void loadCompareImage(const std::string& filename);
 
-	virtual void performAll() = 0;
+	virtual void performAllDistance() = 0;
+	virtual void performAllLowe() = 0;
+	virtual void performAllCrossCheck() = 0;
 
 	void setMaxDistance(int value)
 	{

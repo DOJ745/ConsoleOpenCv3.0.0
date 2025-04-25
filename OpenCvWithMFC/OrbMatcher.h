@@ -177,15 +177,48 @@ public:
 		detectAndComputeCompareImg();
 	};
 
-	void performAll()
+	void performAllDistance() override
 	{
 		createDetector();
 		detectAndComputeMainImg();
 		detectAndComputeCompareImg();
-		matchFeatures();
+		matchFeaturesDistance();
 		visualizeMatches();
-		TRACE("ORB match percentage: %.2f%%\n", calculateMatchPercentage());
-		setWindowName("ORB Matches");
+		setWindowName("[ORB] Distance Matches");
+		showResult();
+		CString tempMsg;
+		tempMsg.Format(L"ORB match percentage DISTANCE: %.2f%%", calculateMatchPercentage());
+		AfxMessageBox(tempMsg, MB_OK | MB_ICONINFORMATION);
+	}
+
+	void performAllLowe() override
+	{
+		createDetector();
+		detectAndComputeMainImg();
+		detectAndComputeCompareImg();
+		matchFeaturesLowe();
+		visualizeMatches();
+		TRACE("ORB match percentage LOWE: %.2f%%\n", calculateMatchPercentage());
+		setWindowName("[ORB] Lowe Matches");
+		showResult();
+	}
+
+	void performAllCrossCheck() override
+	{
+		clock_t start = clock();
+		createDetector();
+		detectAndComputeMainImg();
+		detectAndComputeCompareImg();
+		matchFeaturesDistance();
+		matchFeaturesCrossCheck();
+		clock_t end = clock();
+
+		double time = (double)(end - start) / CLOCKS_PER_SEC;
+		TRACE("ORB perform all CrossCheck duration: %.6f sec\n", time);
+
+		visualizeMatchesCrossCheck();
+		TRACE("ORB match percentage DISTANCE (CROSS CHECK): %.2f%%\n", calculateMatchPercentage());
+		setWindowName("[ORB] Distance cross-checked Matches");
 		showResult();
 	}
 
@@ -193,5 +226,51 @@ public:
 	{
 		TRACE("======>[ORB] destroying object...\n");
 	};
+
+	/*
+	Метод фильтрации совпадений, который помогает отсеять ложные совпадения между изображениями. 
+	Идея заключается в том, чтобы сопоставить ключевые точки в одной картинке с несколькими точками на другой, 
+	и затем отфильтровать те, которые имеют слишком близкие расстояния 
+	(по Лоу это совпадения с расстоянием, которое больше чем 0.75 расстояния до второго ближайшего соседа)
+	*/
+	void matchFeaturesLowe() override
+	{
+		if (!m_goodMatches.empty())
+		{
+			m_goodMatches.clear();
+		}
+
+		const float loweRatio = 0.75f; 
+		cv::BFMatcher matcher(cv::NORM_HAMMING, true);
+
+		matcher.match(m_descriptorsCompareImg, m_descriptorsMainImg, m_matches);
+		matcher.knnMatch(m_descriptorsMainImg, m_descriptorsCompareImg, m_knnMatches, 2);  // 2 ближайших соседа
+
+		for (size_t i = 0; i < m_knnMatches.size(); i++) 
+		{
+			/*if (m_knnMatches[i][0].distance < loweRatio * m_knnMatches[i][1].distance) 
+			{
+				m_goodMatches.push_back(m_knnMatches[i][0]);
+			}*/
+
+			if (m_knnMatches[i].size() >= 2) 
+			{
+				const cv::DMatch& bestMatch = m_knnMatches[i][0];
+				const cv::DMatch& betterMatch = m_knnMatches[i][1];
+
+				// Проверяем индексы на соответствие массивам ключевых точек
+				if (bestMatch.queryIdx >= 0 
+					&& bestMatch.queryIdx < m_keypointsCompareImg.size() 
+					&& bestMatch.trainIdx >= 0 
+					&& bestMatch.trainIdx < m_keypointsMainImg.size()) 
+				{
+					if (bestMatch.distance < loweRatio * betterMatch.distance)
+					{
+						m_goodMatches.push_back(bestMatch);
+					}
+				}
+			}
+		}
+	}
 };
 

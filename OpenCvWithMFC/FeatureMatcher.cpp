@@ -59,8 +59,13 @@ void FeatureMatcher::normalizeImages()
 	normalizeCompareImage();
 }
 
-void FeatureMatcher::matchFeatures() 
+void FeatureMatcher::matchFeaturesDistance() 
 {
+	if (!m_goodMatches.empty())
+	{
+		m_goodMatches.clear();
+	}
+
 	cv::BFMatcher matcher(cv::NORM_HAMMING);
 
 	matcher.match(m_descriptorsCompareImg, m_descriptorsMainImg, m_matches);
@@ -82,6 +87,29 @@ void FeatureMatcher::matchFeatures()
 	}
 }
 
+// Фильтрация, которая проверяет, совпадает ли точка с обеих сторон (от первого изображения и от второго) одинаково
+// Совпадения предварительно должны быть найдены
+void FeatureMatcher::matchFeaturesCrossCheck()
+{
+	if (!m_goodMatches.empty())
+	{
+		for (size_t i = 0; i < m_goodMatches.size(); i++) 
+		{
+			// Проверка, что обратное совпадение также существует
+			int queryIdx = m_goodMatches[i].queryIdx;
+			int trainIdx = m_goodMatches[i].trainIdx;
+
+			if (std::find_if(m_goodMatches.begin(), m_goodMatches.end(), [trainIdx](const cv::DMatch& m) 
+			{
+				return m.queryIdx == trainIdx;
+			}) != m_goodMatches.end()) 
+			{
+				m_crossCheckedMatches.push_back(m_goodMatches[i]); // Если совпадение найдено, добавляем
+			}
+		}
+	}
+}
+
 void FeatureMatcher::visualizeMatches() 
 {
 	cv::drawMatches(m_compareImage
@@ -89,6 +117,20 @@ void FeatureMatcher::visualizeMatches()
 		, m_mainImage
 		, m_keypointsMainImg
 		, m_goodMatches
+		, m_resultImage
+		, cv::Scalar::all(-1)
+		, cv::Scalar::all(-1)
+		, std::vector<char>()
+		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+}
+
+void FeatureMatcher::visualizeMatchesCrossCheck() 
+{
+	cv::drawMatches(m_compareImage
+		, m_keypointsCompareImg
+		, m_mainImage
+		, m_keypointsMainImg
+		, m_crossCheckedMatches
 		, m_resultImage
 		, cv::Scalar::all(-1)
 		, cv::Scalar::all(-1)

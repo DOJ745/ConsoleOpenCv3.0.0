@@ -152,6 +152,7 @@ TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 	, m_akazeMatcher(nullptr)
 	, m_orbMatcher(nullptr)
 	, m_akazeDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB)
+	, m_akazeDescriptorChannels(3)
 {
 	  InitializeCriticalSection(&m_criticalSection);
 }
@@ -221,9 +222,9 @@ void TestDialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_AKAZE_THRESHOLD, m_akazeThreshold);
 	DDV_MinMaxFloat(pDX, m_akazeThreshold, 0, 1);
 	DDX_Text(pDX, IDC_EDIT_AKAZE_NUMBER_OCTAVES, m_akazeNumberOctaves);
-	DDV_MinMaxInt(pDX, m_akazeNumberOctaves, 1, 10);
+	DDV_MinMaxInt(pDX, m_akazeNumberOctaves, 1, 20);
 	DDX_Text(pDX, IDC_EDIT_AKAZE_NUMBER_OCTAVE_LAYERS, m_akazeNumberOctaveLayers);
-	DDV_MinMaxInt(pDX, m_akazeNumberOctaveLayers, 1, 10);
+	DDV_MinMaxInt(pDX, m_akazeNumberOctaveLayers, 1, 20);
 	DDX_Control(pDX, IDC_COMBO_AKAZE_DESCRIPTOR_TYPES, m_comboBoxAkazeDescriptorTypes);
 }
 
@@ -290,18 +291,41 @@ BOOL TestDialog::OnInitDialog()
 		return FALSE;
 	}
 
-	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_KAZE_UPRIGHT");
-	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_KAZE");
-	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_MLDB_UPRIGHT");
-	m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_MLDB");
+	int ind1 = m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_KAZE_UPRIGHT");
+	m_comboBoxAkazeDescriptorTypes.SetItemData(ind1, cv::AKAZE::DESCRIPTOR_KAZE_UPRIGHT);
 
-	m_comboBoxAkazeDescriptorTypes.SetCurSel(0);
+	int ind2 = m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_KAZE");
+	m_comboBoxAkazeDescriptorTypes.SetItemData(ind2, cv::AKAZE::DESCRIPTOR_KAZE);
+
+	int ind3 = m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_MLDB_UPRIGHT");
+	m_comboBoxAkazeDescriptorTypes.SetItemData(ind3, cv::AKAZE::DESCRIPTOR_MLDB_UPRIGHT);
+	
+	int ind4 = m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_MLDB");
+	m_comboBoxAkazeDescriptorTypes.SetItemData(ind4, cv::AKAZE::DESCRIPTOR_MLDB);
+
+	m_comboBoxAkazeDescriptorTypes.SetCurSel(ind4);
+
+	CheckRadioButton(IDC_RADIO_AKAZE_CHANNELS_1, IDC_RADIO_AKAZE_CHANNELS_3, IDC_RADIO_AKAZE_CHANNELS_3);
+	
+	if (GetCheckedRadioButton(IDC_RADIO_AKAZE_CHANNELS_1, IDC_RADIO_AKAZE_CHANNELS_3) == IDC_RADIO_AKAZE_CHANNELS_3)
+	{
+		m_akazeDescriptorChannels = GetDlgItemInt(IDC_RADIO_AKAZE_CHANNELS_3);
+	}
 
 	m_akazeMatcher = new AkazeMatcher();
 	m_orbMatcher = new OrbMatcher();
 
+	m_akazeMatcher->createDetector(m_akazeThreshold
+		, m_akazeNumberOctaves
+		, m_akazeNumberOctaveLayers
+		, 0
+		, m_akazeDescriptorChannels
+		, m_akazeDescriptorType);
+
 	// IMPORTANT: OpenCV create as many threads as you have cores in your CPU
 	//cv::setNumThreads(0);
+
+	cv::setNumThreads(-1);
 
 	return TRUE;
 }
@@ -394,12 +418,16 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		if (dlg->m_makeGray)
 		{
 			cv::cvtColor(letterboxFrame, finalFiltered, cv::COLOR_BGR2GRAY);
+			//cv::threshold(finalFiltered, finalFiltered, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+			//cv::adaptiveThreshold(finalFiltered, finalFiltered, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 11, 2);
+			//cv::adaptiveThreshold(finalFiltered, finalFiltered, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 11, 3);
 		}
 		else
 		{
 		   cv::cvtColor(letterboxFrame, finalFiltered, cv::COLOR_BGR2RGB);
 		}
 		
+		// TODO: половина кристалла распознаётся лучше, чем кристалл целиком (около 80% по AKAZE)
 
 		if (dlg->m_applyClahe && dlg->m_makeGray)
 		{
@@ -662,7 +690,7 @@ void TestDialog::OnBnClickedCheckMakeGray()
 
 void TestDialog::OnBnClickedButtonTestCompareFrames()
 {
-	const double maxDistance = 50.0;
+	const double maxDistance = 60.0;
 	std::string compareImgPath = IMG_ROI_NAME;
 	std::string mainImgPath = IMG_COMPARE_FRAME_NAME;
 
@@ -672,17 +700,81 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		return;
 	}
 
-	m_orbMatcher->setMaxDistance(maxDistance);
-	m_akazeMatcher->setMaxDistance(maxDistance);
+	cv::Mat tempCompareImg = cv::imread(IMG_ROI_NAME, cv::IMREAD_COLOR);
+	cv::Mat tempMainImg = cv::imread(IMG_COMPARE_FRAME_NAME, cv::IMREAD_COLOR);
 
+	//int kernelSize = 3; // positive and odd
+	//cv::Laplacian(tempCompareImg, tempCompareImg, CV_16S, kernelSize);
+	//cv::convertScaleAbs(tempCompareImg, tempCompareImg);
+
+	//cv::Laplacian(tempMainImg, tempMainImg, CV_16S, kernelSize);
+	//cv::convertScaleAbs(tempMainImg, tempMainImg);
+
+	//cv::imshow("Compare Laplacian", tempCompareImg);
+	//cv::imshow("Main Laplacian", tempMainImg);
+
+	//for (;;)
+	//{
+	//	int key = cv::waitKey(0);
+	//	if (key > 0)
+	//	{
+	//	   cv::destroyWindow("Compare Laplacian");
+	//	   cv::destroyWindow("Main Laplacian");
+
+	//	   break;
+	//	}
+	//}
+
+
+	//// Эрозия
+	//cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+	//cv::erode(tempCompareImg, tempCompareImg, kernel);
+	//cv::erode(tempMainImg, tempMainImg, kernel);
+
+	//// Дилатация
+	//cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+	//cv::dilate(tempCompareImg, tempCompareImg, kernel);
+	//cv::dilate(tempMainImg, tempMainImg, kernel);
+
+
+
+	// Создание результирующего массива для хранения результатов сопоставления
+	cv::Mat result;
+	int result_cols = tempMainImg.cols - tempCompareImg.cols + 1;
+	int result_rows = tempMainImg.rows - tempCompareImg.rows + 1;
+	result.create(result_rows, result_cols, CV_32FC1);
+
+	// Выполнение сопоставления шаблонов
+	int compareMethod = cv::TM_CCOEFF_NORMED;
+	cv::matchTemplate(tempMainImg, tempCompareImg, result, compareMethod);
+
+	// Поиск максимального совпадения
+	double minVal, maxVal;
+	cv::Point minLoc, maxLoc;
+	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+
+	// Отрисовка прямоугольника вокруг найденного совпадения
+	cv::rectangle(tempMainImg, maxLoc, cv::Point(maxLoc.x + tempCompareImg.cols, maxLoc.y + tempCompareImg.rows), cv::Scalar(0, 255, 0), 2);
+	cv::rectangle(tempMainImg, minLoc, cv::Point(minLoc.x + tempCompareImg.cols, maxLoc.y + tempCompareImg.rows), cv::Scalar(15, 100, 130), 2);
+
+	// Отображение результатов
+	std::string wndName = "Max match: " + std::to_string(static_cast<long double>(maxVal));
+	cv::imshow(wndName, tempMainImg);
+	cv::waitKey(0);
+
+	/*m_orbMatcher->setMaxDistance(maxDistance);
 	m_orbMatcher->loadMainImage(mainImgPath);
 	m_orbMatcher->loadCompareImage(compareImgPath);
+	m_orbMatcher->performAllDistance();
+	//m_orbMatcher->performAllLowe();
+	//m_orbMatcher->performAllCrossCheck();
 
 	m_akazeMatcher->loadMainImage(mainImgPath);
 	m_akazeMatcher->loadCompareImage(compareImgPath);
-
-	m_orbMatcher->performAll();
-	m_akazeMatcher->performAll();
+	m_akazeMatcher->setMaxDistance(maxDistance);
+	m_akazeMatcher->performAllDistance();
+	//m_akazeMatcher->performAllLowe();
+	//m_akazeMatcher->performAllCrossCheck();
 
 	for (;;)
 	{
@@ -692,9 +784,9 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		if (key >= 0) 
 		{
 			m_orbMatcher->destroyWindow();
-			m_orbMatcher->destroyWindow();
+			m_akazeMatcher->destroyWindow();
 		}
-	}
+	}*/
 }
 
 
@@ -739,8 +831,9 @@ void TestDialog::OnEnUpdateEditAkazeThreshold()
 {
 	CString tempValue;
 	GetDlgItemText(IDC_EDIT_AKAZE_THRESHOLD, tempValue);
+	m_akazeThreshold = _ttof(tempValue);
 
-	m_akazeMatcher->setThreshold(_ttof(tempValue));
+	m_akazeMatcher->setThreshold(m_akazeThreshold);
 }
 
 
