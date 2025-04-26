@@ -725,7 +725,6 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	//	}
 	//}
 
-
 	//// Эрозия
 	//cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
 	//cv::erode(tempCompareImg, tempCompareImg, kernel);
@@ -737,7 +736,6 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	//cv::dilate(tempMainImg, tempMainImg, kernel);
 
 
-
 	// Создание результирующего массива для хранения результатов сопоставления
 	cv::Mat result;
 	int result_cols = tempMainImg.cols - tempCompareImg.cols + 1;
@@ -745,7 +743,9 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	result.create(result_rows, result_cols, CV_32FC1);
 
 	// Выполнение сопоставления шаблонов
-	int compareMethod = cv::TM_CCOEFF_NORMED;
+	int compareMethod = cv::TM_CCORR_NORMED;
+	//cv::TM_SQDIFF_NORMED; // 0,01 - 0,05 - good
+	//cv::TM_CCOEFF_NORMED; // traditional from 0.01 to 1.00
 	cv::matchTemplate(tempMainImg, tempCompareImg, result, compareMethod);
 
 	// Поиск максимального совпадения
@@ -755,10 +755,10 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 
 	// Отрисовка прямоугольника вокруг найденного совпадения
 	cv::rectangle(tempMainImg, maxLoc, cv::Point(maxLoc.x + tempCompareImg.cols, maxLoc.y + tempCompareImg.rows), cv::Scalar(0, 255, 0), 2);
-	cv::rectangle(tempMainImg, minLoc, cv::Point(minLoc.x + tempCompareImg.cols, maxLoc.y + tempCompareImg.rows), cv::Scalar(15, 100, 130), 2);
+	cv::rectangle(tempMainImg, minLoc, cv::Point(minLoc.x + tempCompareImg.cols, minLoc.y + tempCompareImg.rows), cv::Scalar(15, 100, 130), 2);
 
 	// Отображение результатов
-	std::string wndName = "Max match: " + std::to_string(static_cast<long double>(maxVal));
+	std::string wndName = "Max match: " + std::to_string(static_cast<long double>(maxVal)) + std::string(". Min match: ") + std::to_string(static_cast<long double>(minVal));
 	cv::imshow(wndName, tempMainImg);
 	cv::waitKey(0);
 
