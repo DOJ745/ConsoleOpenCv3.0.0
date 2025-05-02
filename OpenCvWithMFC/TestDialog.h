@@ -53,15 +53,16 @@ protected:
 	virtual BOOL OnInitDialog();
 
 private:
-	cv::VideoCapture m_videoCapture;	// Захват видео
-	cv::Mat m_currentFrame;				// Текущий кадр
-	cv::Mat m_rectFrame;				// Кадр с прямоугольником
-	CRITICAL_SECTION m_criticalSection; // Критическая секция для синхронизации
-	volatile bool m_stopThread;         // Флаг завершения потока
-	volatile bool m_isDrawing;          // Флаг рисования прямоугольника
-	cv::Point m_startPoint;             // Начало прямоугольника
-	cv::Point m_endPoint;               // Конец прямоугольника
-	CWinThread* m_videoThread;          // Поток для обработки захвата видео
+	cv::VideoCapture m_videoCapture;		// Захват видео
+	cv::Mat m_currentFrame;					// Текущий кадр
+	cv::Mat m_rectFrame;					// Кадр с прямоугольником
+	CRITICAL_SECTION m_criticalSection;		// Критическая секция для синхронизации
+	volatile bool m_stopThread;				// Флаг завершения потока
+	volatile bool m_isDrawing;				// Флаг рисования прямоугольника
+	cv::Point m_startPoint;					// Начало прямоугольника
+	cv::Point m_endPoint;					// Конец прямоугольника
+	CWinThread* m_videoThread;				// Поток для обработки захвата видео
+	CWinThread* m_orbRotationMatcherThread;	// Поток для обработки вычислений ключевых точек и поворота изображения с совпадением
 
 	AkazeMatcher* m_akazeMatcher;
 	OrbMatcher* m_orbMatcher;
@@ -121,4 +122,10 @@ public:
 	afx_msg void OnBnClickedRadioAkazeChannels3();
 	afx_msg void OnEnUpdateEditAkazeThreshold();
 	afx_msg void OnCbnSelchangeComboAkazeDescriptorTypes();
+	BOOL m_applyOtsu;
+	BOOL m_applyAdaptiveBinary;
+	BOOL m_applyAdaptiveBinaryGauss;
+	afx_msg void OnBnClickedCheckTestApplyOtsu();
+	afx_msg void OnBnClickedCheckTestApplyAdaptiveBinary();
+	afx_msg void OnBnClickedCheckTestApplyAdaptiveBinaryGauss();
 };

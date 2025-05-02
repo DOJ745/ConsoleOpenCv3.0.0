@@ -132,6 +132,7 @@ TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 	, m_stopThread(false)
 	, m_isDrawing(false)
 	, m_videoThread(NULL)
+	, m_orbRotationMatcherThread(NULL)
 	, m_cursorChildCoord(_T("MOUSE COORDS"))
 	, m_cannyThreshold1(50)
 	, m_cannyThreshold2(90)
@@ -153,6 +154,9 @@ TestDialog::TestDialog(CWnd* pParent /*=NULL*/)
 	, m_orbMatcher(nullptr)
 	, m_akazeDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB)
 	, m_akazeDescriptorChannels(3)
+	, m_applyOtsu(FALSE)
+	, m_applyAdaptiveBinary(FALSE)
+	, m_applyAdaptiveBinaryGauss(FALSE)
 {
 	  InitializeCriticalSection(&m_criticalSection);
 }
@@ -164,6 +168,11 @@ TestDialog::~TestDialog()
 	if (m_videoThread && m_videoThread->m_hThread)
 	{
 		WaitForSingleObject(m_videoThread->m_hThread, INFINITE);
+	}
+
+	if (m_orbRotationMatcherThread && m_orbRotationMatcherThread->m_hThread)
+	{
+		WaitForSingleObject(m_orbRotationMatcherThread->m_hThread, INFINITE);
 	}
 
 	if (m_videoCapture.isOpened())
@@ -226,6 +235,9 @@ void TestDialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_AKAZE_NUMBER_OCTAVE_LAYERS, m_akazeNumberOctaveLayers);
 	DDV_MinMaxInt(pDX, m_akazeNumberOctaveLayers, 1, 20);
 	DDX_Control(pDX, IDC_COMBO_AKAZE_DESCRIPTOR_TYPES, m_comboBoxAkazeDescriptorTypes);
+	DDX_Check(pDX, IDC_CHECK_TEST_APPLY_OTSU, m_applyOtsu);
+	DDX_Check(pDX, IDC_CHECK_TEST_APPLY_ADAPTIVe_BINARY, m_applyAdaptiveBinary);
+	DDX_Check(pDX, IDC_CHECK_TEST_APPLY_ADAPTIVE_BINARY_GAUSS, m_applyAdaptiveBinaryGauss);
 }
 
 BOOL TestDialog::OnInitDialog()
@@ -285,14 +297,6 @@ BOOL TestDialog::OnInitDialog()
 
 	cv::setMouseCallback(OPEN_CV_WINDOW_NAME, MouseCallback, this);
 
-	m_videoThread = AfxBeginThread(VideoThread, this);
-	
-	if (m_videoThread == NULL)
-	{
-		MessageBox(_T("Не удалось создать поток!"));
-		return FALSE;
-	}
-
 	int ind1 = m_comboBoxAkazeDescriptorTypes.AddString(L"DESCRIPTOR_KAZE_UPRIGHT");
 	m_comboBoxAkazeDescriptorTypes.SetItemData(ind1, cv::AKAZE::DESCRIPTOR_KAZE_UPRIGHT);
 
@@ -314,6 +318,7 @@ BOOL TestDialog::OnInitDialog()
 		m_akazeDescriptorChannels = GetDlgItemInt(IDC_RADIO_AKAZE_CHANNELS_3);
 	}
 
+	// NOTE: половина кристалла распознаётся лучше, чем кристалл целиком (около 80% по AKAZE)
 	m_akazeMatcher = new AkazeMatcher();
 
 	m_akazeMatcher->createDetector(m_akazeThreshold
@@ -330,8 +335,15 @@ BOOL TestDialog::OnInitDialog()
 
 	// IMPORTANT: OpenCV create as many threads as you have cores in your CPU
 	//cv::setNumThreads(0);
-
 	//cv::setNumThreads(-1);
+
+	m_videoThread = AfxBeginThread(VideoThread, this);
+
+	if (m_videoThread == NULL)
+	{
+		MessageBox(_T("Не удалось создать поток для захвата видео!"));
+		return FALSE;
+	}
 
 	return TRUE;
 }
@@ -364,6 +376,9 @@ BEGIN_MESSAGE_MAP(TestDialog, CDialogEx)
 	ON_BN_CLICKED(IDC_RADIO_AKAZE_CHANNELS_3, &TestDialog::OnBnClickedRadioAkazeChannels3)
 	ON_EN_UPDATE(IDC_EDIT_AKAZE_THRESHOLD, &TestDialog::OnEnUpdateEditAkazeThreshold)
 	ON_CBN_SELCHANGE(IDC_COMBO_AKAZE_DESCRIPTOR_TYPES, &TestDialog::OnCbnSelchangeComboAkazeDescriptorTypes)
+	ON_BN_CLICKED(IDC_CHECK_TEST_APPLY_OTSU, &TestDialog::OnBnClickedCheckTestApplyOtsu)
+	ON_BN_CLICKED(IDC_CHECK_TEST_APPLY_ADAPTIVe_BINARY, &TestDialog::OnBnClickedCheckTestApplyAdaptiveBinary)
+	ON_BN_CLICKED(IDC_CHECK_TEST_APPLY_ADAPTIVE_BINARY_GAUSS, &TestDialog::OnBnClickedCheckTestApplyAdaptiveBinaryGauss)
 END_MESSAGE_MAP()
 
 
@@ -373,6 +388,8 @@ END_MESSAGE_MAP()
 UINT TestDialog::VideoThread(LPVOID pParam) 
 {
 	TestDialog* dlg = static_cast<TestDialog*>(pParam);
+
+	dlg->m_orbMatcher->setCompareImage(cv::imread(IMG_ROI_NAME, cv::IMREAD_COLOR));
 
 	while (!dlg->m_stopThread && dlg->m_videoCapture.isOpened()) 
 	{
@@ -423,23 +440,39 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		cv::Mat gray; 
 		cv::Mat finalFiltered;
 
+		EnterCriticalSection(&dlg->m_criticalSection);
+
 		if (dlg->m_makeGray)
 		{
 			cv::cvtColor(letterboxFrame, finalFiltered, cv::COLOR_BGR2GRAY);
-			//cv::threshold(finalFiltered, finalFiltered, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
-			//cv::adaptiveThreshold(finalFiltered, finalFiltered, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 11, 2);
-			//cv::adaptiveThreshold(finalFiltered, finalFiltered, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 11, 3);
+
+			// Нормализация
+			cv::minMaxLoc(finalFiltered, NULL, NULL);
+			cv::normalize(finalFiltered, finalFiltered, 0, 255, cv::NORM_MINMAX);
 		}
 		else
 		{
 		   cv::cvtColor(letterboxFrame, finalFiltered, cv::COLOR_BGR2RGB);
 		}
-		
-		// TODO: половина кристалла распознаётся лучше, чем кристалл целиком (около 80% по AKAZE)
 
+		if (dlg->m_makeGray && dlg->m_applyOtsu)
+		{
+			cv::threshold(finalFiltered, finalFiltered, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+		}
+
+		if (dlg->m_makeGray && dlg->m_applyAdaptiveBinary)
+		{
+			cv::adaptiveThreshold(finalFiltered, finalFiltered, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 11, 2);
+		}
+
+		if (dlg->m_makeGray && dlg->m_applyAdaptiveBinaryGauss)
+		{
+			cv::adaptiveThreshold(finalFiltered, finalFiltered, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C, cv::THRESH_BINARY, 11, 2);
+		}
+
+		// CLAHE следует применять до размытия
 		if (dlg->m_applyClahe && dlg->m_makeGray)
 		{
-			// CLAHE до размытия
 			int tempLimit = dlg->m_claheClipLimit;
 			cv::Size tempSize(dlg->m_claheWidth, dlg->m_claheHeight);
 			cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(tempLimit, tempSize);
@@ -459,6 +492,8 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 			cv::Canny(finalFiltered, finalFiltered, dlg->m_cannyThreshold1, dlg->m_cannyThreshold2);
 		}
 
+		LeaveCriticalSection(&dlg->m_criticalSection);
+
 		EnterCriticalSection(&dlg->m_criticalSection);
 
 		dlg->m_currentFrame = finalFiltered.clone();
@@ -469,16 +504,13 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 			//dlg->m_rectFrame = finalFiltered.clone();
 			dlg->m_rectFrame = dlg->m_currentFrame.clone();
 
-			dlg->m_orbMatcher->setMainImage(dlg->m_rectFrame);
-			dlg->m_orbMatcher->setCompareImage(cv::imread(IMG_ROI_NAME, cv::IMREAD_COLOR));
-
+			//dlg->m_orbMatcher->setMainImage(dlg->m_rectFrame);
 			//dlg->m_orbMatcher->detectAndComputeMainImg();
 			//dlg->m_orbMatcher->detectAndComputeCompareImg();
 			//dlg->m_orbMatcher->matchFeaturesDistance();
 			//dlg->m_orbMatcher->rotateAndCompareByDistance();
-
-			dlg->m_orbMatcher->matchTemplate();
-			dlg->m_rectFrame = dlg->m_orbMatcher->getMainImage().clone();
+			//dlg->m_orbMatcher->matchTemplate();
+			//dlg->m_rectFrame = dlg->m_orbMatcher->getMainImage().clone();
 		}
 
 		if (!dlg->m_rectFrame.empty()) 
@@ -517,6 +549,30 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		delete rect;
 		rect = nullptr;
 	}
+
+	return 0;
+}
+
+UINT TestDialog::OrbRotationMatcherThread(LPVOID pParam) 
+{
+	TestDialog* dlg = static_cast<TestDialog*>(pParam);
+
+	//while (!dlg->m_stopThread && dlg->m_videoCapture.isOpened()) 
+	//{
+		//dlg->m_orbMatcher->setMainImage(dlg->m_rectFrame);
+		//dlg->m_orbMatcher->setCompareImage(cv::imread(IMG_ROI_NAME, cv::IMREAD_COLOR));
+
+		//EnterCriticalSection(&dlg->m_criticalSection);
+
+		//dlg->m_orbMatcher->detectAndComputeMainImg();
+		//dlg->m_orbMatcher->detectAndComputeCompareImg();
+		//dlg->m_orbMatcher->matchFeaturesDistance();
+		//dlg->m_orbMatcher->rotateAndCompareByDistance();
+		//dlg->m_orbMatcher->matchTemplate();
+		//dlg->m_rectFrame = dlg->m_orbMatcher->getMainImage().clone();
+
+		//LeaveCriticalSection(&dlg->m_criticalSection);
+	//}
 
 	return 0;
 }
@@ -685,32 +741,10 @@ void TestDialog::OnEnUpdateEditClaheHeight()
 	m_claheHeight = GetDlgItemInt(IDC_EDIT_TEST_CLAHE_HEIGHT);
 }
 
-void TestDialog::OnBnClickedCheckApplyCanny()
-{
-	UpdateData(TRUE);
-}
-
-
-void TestDialog::OnBnClickedCheckApplyGaussian()
-{
-	UpdateData(TRUE);
-}
-
-
-void TestDialog::OnBnClickedCheckApplyClahe()
-{
-	UpdateData(TRUE);
-}
-
-void TestDialog::OnBnClickedCheckMakeGray()
-{
-	UpdateData(TRUE);
-}
-
 
 void TestDialog::OnBnClickedButtonTestCompareFrames()
 {
-	const double maxDistance = 60.0;
+	//const double maxDistance = 60.0;
 	std::string compareImgPath = IMG_ROI_NAME;
 	std::string mainImgPath = IMG_COMPARE_FRAME_NAME;
 
@@ -755,35 +789,13 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	////cv::dilate(tempCompareImg, tempCompareImg, kernel);
 	////cv::dilate(tempMainImg, tempMainImg, kernel);
 
-
-	//// Создание результирующего массива для хранения результатов сопоставления
-	//cv::Mat result;
-	//int result_cols = tempMainImg.cols - tempCompareImg.cols + 1;
-	//int result_rows = tempMainImg.rows - tempCompareImg.rows + 1;
-	//result.create(result_rows, result_cols, CV_32FC1);
-
-	//// Выполнение сопоставления шаблонов
-	//int compareMethod = cv::TM_CCOEFF_NORMED;
-	////cv::TM_CCORR_NORMED;
-	////cv::TM_SQDIFF_NORMED; // 0,01 - 0,05 - good
-	////cv::TM_CCOEFF_NORMED; // traditional from 0.01 to 1.00
-	//cv::matchTemplate(tempMainImg, tempCompareImg, result, compareMethod);
-
-	//// Поиск максимального совпадения
-	//double minVal, maxVal;
-	//cv::Point minLoc, maxLoc;
-	//cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
-
-	//// Отрисовка прямоугольника вокруг найденного совпадения
-	//cv::rectangle(tempMainImg, maxLoc, cv::Point(maxLoc.x + tempCompareImg.cols, maxLoc.y + tempCompareImg.rows), cv::Scalar(0, 255, 0), 2);
-	//cv::rectangle(tempMainImg, minLoc, cv::Point(minLoc.x + tempCompareImg.cols, minLoc.y + tempCompareImg.rows), cv::Scalar(15, 100, 130), 2);
-
 	//// Отображение результатов
 	//std::string wndName = "Max match: " + std::to_string(static_cast<long double>(maxVal)) + std::string(". Min match: ") + std::to_string(static_cast<long double>(minVal));
 	//cv::imshow(wndName, tempMainImg);
 	//cv::waitKey(0);
 
-	m_orbMatcher->setMaxDistance(maxDistance);
+	//m_orbMatcher->setMaxDistance(maxDistance);
+
 	m_orbMatcher->loadMainImage(mainImgPath);
 	m_orbMatcher->loadCompareImage(compareImgPath);
 	m_orbMatcher->performAllDistance();
@@ -815,6 +827,27 @@ void TestDialog::OnEnKillfocusEditFloat()
 	TRACE("======>[TEST] FLOAT VALUE: %.3f\n", m_akazeThreshold);
 }
 
+void TestDialog::OnBnClickedCheckApplyCanny()
+{
+	UpdateData(TRUE);
+}
+
+
+void TestDialog::OnBnClickedCheckApplyGaussian()
+{
+	UpdateData(TRUE);
+}
+
+
+void TestDialog::OnBnClickedCheckApplyClahe()
+{
+	UpdateData(TRUE);
+}
+
+void TestDialog::OnBnClickedCheckMakeGray()
+{
+	UpdateData(TRUE);
+}
 
 void TestDialog::OnEnKillfocusEditAkazeNumberOctaves()
 {
@@ -823,6 +856,23 @@ void TestDialog::OnEnKillfocusEditAkazeNumberOctaves()
 
 
 void TestDialog::OnEnKillfocusEditAkazeNumberOctaveLayers()
+{
+	UpdateData(TRUE);
+}
+
+void TestDialog::OnBnClickedCheckTestApplyOtsu()
+{
+	UpdateData(TRUE);
+}
+
+
+void TestDialog::OnBnClickedCheckTestApplyAdaptiveBinary()
+{
+	UpdateData(TRUE);
+}
+
+
+void TestDialog::OnBnClickedCheckTestApplyAdaptiveBinaryGauss()
 {
 	UpdateData(TRUE);
 }

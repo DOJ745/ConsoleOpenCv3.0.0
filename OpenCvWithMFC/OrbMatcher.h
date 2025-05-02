@@ -158,7 +158,7 @@ public:
 	}
 
 	void createDetector(int nFeatures = 500
-		, float scaleFactor = 1.05f
+		, float scaleFactor = 1.10f
 		, int nLevels = 10
 		, int edgeThreshold = 10
 		, int firstLevel = 0

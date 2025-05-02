@@ -1140,127 +1140,229 @@
 
 
 
-// ===== Select ROI by mouse  MODIFIED=====
-
-void setPointInImage(const int width, const int height, int& x, int& y)
-{
-    if (x > width)
-    {
-        x = width;
-    }
-
-    if (x < 0)
-    {
-        x = 0;
-    }
-
-    if (y > height)
-    {
-        y = height;
-    }
-
-    if (y < 0)
-    {
-        y = 0;
-    }
-}
-
-bool isDrawing = false;
-cv::Mat templateImg, mainImg, tempImg;
-cv::Point startPoint, centerPoint, endPoint;
-const char* selectRoiWindow = "Select ROI RECT";
-
-void onMouse(int event, int x, int y, int, void* data) 
-{
-    switch (event) 
-    {
-    case cv::EVENT_LBUTTONDOWN:
-        isDrawing = true;
-        startPoint = cv::Point(x, y);
-        cv::circle(tempImg, startPoint, 5, cv::Scalar(0, 255, 0), -1);
-
-        break;
-
-    case cv::EVENT_MOUSEMOVE:
-		tempImg = mainImg.clone();
-
-        if (isDrawing)
-        {
-            setPointInImage(tempImg.cols, tempImg.rows, x, y);
-
-            endPoint = cv::Point(x, y);
-
-            cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
-        }
-		cv::imshow(selectRoiWindow, tempImg);
-        break;
-
-    case cv::EVENT_LBUTTONUP:
-        isDrawing = false;
-
-        setPointInImage(tempImg.cols, tempImg.rows, x, y);
-        endPoint = cv::Point(x, y);
-
-        cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
-        cv::circle(tempImg, endPoint, 5, cv::Scalar(0, 255, 0), -1);
-
-        centerPoint = cv::Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
-
-        cv::circle(tempImg, centerPoint, 15, cv::Scalar(255, 0, 0), -1);
-		cv::imshow(selectRoiWindow, tempImg);
-        break;
-    }
-}
+//// ===== Select ROI by mouse  MODIFIED=====
+//
+//void setPointInImage(const int width, const int height, int& x, int& y)
+//{
+//    if (x > width)
+//    {
+//        x = width;
+//    }
+//
+//    if (x < 0)
+//    {
+//        x = 0;
+//    }
+//
+//    if (y > height)
+//    {
+//        y = height;
+//    }
+//
+//    if (y < 0)
+//    {
+//        y = 0;
+//    }
+//}
+//
+//bool isDrawing = false;
+//cv::Mat templateImg, mainImg, tempImg;
+//cv::Point startPoint, centerPoint, endPoint;
+//const char* selectRoiWindow = "Select ROI RECT";
+//
+//void onMouse(int event, int x, int y, int, void* data) 
+//{
+//    switch (event) 
+//    {
+//    case cv::EVENT_LBUTTONDOWN:
+//        isDrawing = true;
+//        startPoint = cv::Point(x, y);
+//        cv::circle(tempImg, startPoint, 5, cv::Scalar(0, 255, 0), -1);
+//
+//        break;
+//
+//    case cv::EVENT_MOUSEMOVE:
+//		tempImg = mainImg.clone();
+//
+//        if (isDrawing)
+//        {
+//            setPointInImage(tempImg.cols, tempImg.rows, x, y);
+//
+//            endPoint = cv::Point(x, y);
+//
+//            cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+//        }
+//		cv::imshow(selectRoiWindow, tempImg);
+//        break;
+//
+//    case cv::EVENT_LBUTTONUP:
+//        isDrawing = false;
+//
+//        setPointInImage(tempImg.cols, tempImg.rows, x, y);
+//        endPoint = cv::Point(x, y);
+//
+//        cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+//        cv::circle(tempImg, endPoint, 5, cv::Scalar(0, 255, 0), -1);
+//
+//        centerPoint = cv::Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
+//
+//        cv::circle(tempImg, centerPoint, 15, cv::Scalar(255, 0, 0), -1);
+//		cv::imshow(selectRoiWindow, tempImg);
+//        break;
+//    }
+//}
+//
+//int main()
+//{
+//    setlocale(LC_ALL, "Russian");
+//	cv::VideoCapture capture;
+//
+//	cv::namedWindow(selectRoiWindow);
+//	cv::setMouseCallback(selectRoiWindow, onMouse);
+//
+//	if (!capture.open(0))
+//	{
+//		return -1;
+//	}
+//
+//	capture.open(0);
+//
+//    while (true)
+//    {
+//		capture >> mainImg;
+//		cv::cvtColor(mainImg, mainImg, cv::COLOR_BGR2RGB);
+//		tempImg = mainImg.clone();
+//		
+//        cv::imshow(selectRoiWindow, tempImg);
+//
+//        char key = cv::waitKey(1);
+//
+//        if (key == 'q' || key == 27) 
+//        {
+//            break;
+//        }
+//    }
+//
+//	cv::setMouseCallback(selectRoiWindow, NULL);
+//
+//    // Min задаёт верхний левый угол прямоугольника
+//    int x1 = std::min(startPoint.x, endPoint.x);
+//    int y1 = std::min(startPoint.y, endPoint.y);
+//    int x2 = std::max(startPoint.x, endPoint.x);
+//    int y2 = std::max(startPoint.y, endPoint.y);
+//
+//    cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
+//    cv::Mat imageRoi = mainImg(roiRect);
+//
+//    cv::imshow("ROI image", imageRoi);
+//
+//    cv::imshow("Main image", mainImg);
+//
+//	cv::imshow("Temp image", tempImg);
+//
+//    cv::waitKey(0);
+//
+//    return 0;
+//}
 
 int main()
 {
     setlocale(LC_ALL, "Russian");
-	cv::VideoCapture capture;
 
-	cv::namedWindow(selectRoiWindow);
-	cv::setMouseCallback(selectRoiWindow, onMouse);
+	const char* imgFile = "images/HD-CHIP-SURFACE.jpg";
+	double startTime, endTime;
 
-	if (!capture.open(0))
+	cv::Mat img = cv::imread(imgFile, cv::IMREAD_GRAYSCALE);
+
+	if (img.empty()) 
 	{
+		std::cerr << "Ошибка: не удалось загрузить изображение!" << std::endl;
 		return -1;
 	}
 
-	capture.open(0);
+	cv::normalize(img, img, 0, 255, cv::NORM_MINMAX);
 
-    while (true)
-    {
-		capture >> mainImg;
-		cv::cvtColor(mainImg, mainImg, cv::COLOR_BGR2RGB);
-		tempImg = mainImg.clone();
-		
-        cv::imshow(selectRoiWindow, tempImg);
+	// Применение LoG фильтра
+	cv::Mat LoG;
+	cv::Laplacian(img, LoG, CV_32F);
+	cv::GaussianBlur(LoG, LoG, cv::Size(5, 5), 0);
 
-        char key = cv::waitKey(1);
+	// Применение DoG фильтра
+	cv::Mat DoG1 = cv::Mat::zeros(img.size(), CV_32F);
+	cv::Mat DoG2 = cv::Mat::zeros(img.size(), CV_32F);
+	cv::GaussianBlur(img, DoG1, cv::Size(3, 3), 0);
+	cv::GaussianBlur(img, DoG2, cv::Size(7, 7), 0);
+	DoG1 -= DoG2;
 
-        if (key == 'q' || key == 27) 
-        {
-            break;
-        }
-    }
+	cv::GaussianBlur(img, DoG1, cv::Size(5, 5), 0);
+	cv::GaussianBlur(img, DoG2, cv::Size(11, 11), 0);
+	DoG2 -= DoG1;
 
-	cv::setMouseCallback(selectRoiWindow, NULL);
+	// Применение DoH фильтра
+	cv::Mat DoH;
+	cv::GaussianBlur(img, DoH, cv::Size(5, 5), 0);
 
-    // Min задаёт верхний левый угол прямоугольника
-    int x1 = std::min(startPoint.x, endPoint.x);
-    int y1 = std::min(startPoint.y, endPoint.y);
-    int x2 = std::max(startPoint.x, endPoint.x);
-    int y2 = std::max(startPoint.y, endPoint.y);
+	cv::Mat Dxx, Dyy, Dxy;
+	cv::Sobel(DoH, Dxx, CV_64F, 2, 0);
+	cv::Sobel(DoH, Dyy, CV_64F, 0, 2);
+	cv::Sobel(DoH, Dxy, CV_64F, 1, 1);
+	DoH = Dxx.mul(Dyy) - Dxy.mul(Dxy);
 
-    cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
-    cv::Mat imageRoi = mainImg(roiRect);
+	// Настройка параметров детектора блобов
+	cv::SimpleBlobDetector::Params params;
+	params.filterByArea = true;
+	params.minArea = 10;
+	params.filterByCircularity = false;
+	params.filterByConvexity = false;
+	params.filterByInertia = false;
 
-    cv::imshow("ROI image", imageRoi);
+	// Создание детектора блобов
+	auto detector = cv::SimpleBlobDetector::create(params);
 
-    cv::imshow("Main image", mainImg);
+	cv::normalize(LoG, LoG, 0, 255, cv::NORM_MINMAX);
+	LoG.convertTo(LoG, CV_8U);
 
-	cv::imshow("Temp image", tempImg);
+	cv::normalize(DoH, DoH, 0, 255, cv::NORM_MINMAX);
+	DoH.convertTo(DoH, CV_8U);
 
-    cv::waitKey(0);
+	// Обнаружение ключевых точек
+	std::vector<cv::KeyPoint> keypoints_LoG, keypoints_DoG1, keypoints_DoG2, keypoints_DoH;
 
-    return 0;
+	startTime = getCPUTime();
+	detector->detect(LoG, keypoints_LoG);
+	endTime	= getCPUTime();
+	std::cout << "Время на LoG (по getCPUTime): " << endTime - startTime << " сек.\n";
+
+	startTime = getCPUTime();
+	detector->detect(DoG1, keypoints_DoG1);
+	endTime	= getCPUTime();
+	std::cout << "Время на DoG1 (по getCPUTime): " << endTime - startTime << " сек.\n";
+
+	startTime = getCPUTime();
+	detector->detect(DoG2, keypoints_DoG2);
+	endTime	= getCPUTime();
+	std::cout << "Время на DoG2 (по getCPUTime): " << endTime - startTime << " сек.\n";
+
+	startTime = getCPUTime();
+	detector->detect(DoH, keypoints_DoH);
+	endTime	= getCPUTime();
+	std::cout << "Время на DoH (по getCPUTime): " << endTime - startTime << " сек.\n";
+
+	// Рисование обнаруженных блобов на исходном изображении
+	cv::Mat img_with_keypoints_LoG, img_with_keypoints_DoG1, img_with_keypoints_DoG2, img_with_keypoints_DoH;
+	cv::drawKeypoints(img, keypoints_LoG, img_with_keypoints_LoG, cv::Scalar(0, 0, 255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::drawKeypoints(img, keypoints_DoG1, img_with_keypoints_DoG1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::drawKeypoints(img, keypoints_DoG2, img_with_keypoints_DoG2, cv::Scalar(255, 0, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::drawKeypoints(img, keypoints_DoH, img_with_keypoints_DoH, cv::Scalar(0, 255, 255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+	// Отображение результатов
+	cv::imshow("LoG", img_with_keypoints_LoG);
+	cv::imshow("DoG1", img_with_keypoints_DoG1);
+	cv::imshow("DoG2", img_with_keypoints_DoG2);
+	cv::imshow("DoH", img_with_keypoints_DoH);
+
+	cv::waitKey(0);
+	cv::destroyAllWindows();
+
+	return 0;
 }

@@ -136,10 +136,10 @@ public:
 		rotationMatrix.at<double>(0, 2) += bbox.width / 2.0 - center.x;
 		rotationMatrix.at<double>(1, 2) += bbox.height / 2.0 - center.y;
 
-		// Применяем поворот
-		//cv::Mat restoredImg;
-		//warpAffine(m_mainImage, restoredImg, rotationMatrix, bbox.size());
-		//imshow("FINAL rotated image", restoredImg);
+		// Применяем поворот к изображению
+		cv::Mat restoredImg;
+		warpAffine(m_mainImage, restoredImg, rotationMatrix, bbox.size());
+		imshow("FINAL rotated image", restoredImg);
 	}
 };
 
