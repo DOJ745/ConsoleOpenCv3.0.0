@@ -502,23 +502,11 @@
 
 
 
-//
-//// ===== Keypoints select and compute =====
+
+//// ===== Apply Rotation by homography =====
 //
 //cv::Mat templateImg, mainImg, copyMainImg;
 //std::vector<cv::Point2f> selectedPoints;
-//
-//void onMouse(int event, int x, int y, int, void*) 
-//{
-//    if (event == cv::EVENT_LBUTTONDOWN) 
-//    {
-//        selectedPoints.emplace_back(cv::Point2f(x, y));
-//        std::cout << "Выбрана точка: (" << x << ", " << y << ")\n";
-//
-//        cv::circle(copyMainImg, cv::Point(x, y), 5, cv::Scalar(0, 255, 0), -1);
-//        cv::imshow("Select Points", copyMainImg);
-//    }
-//}
 //
 //int main() 
 //{
@@ -553,36 +541,10 @@
 //    copyMainImg = mainImg.clone();
 //
 //    cv::imshow("Select Points", mainImg);
-//    cv::setMouseCallback("Select Points", onMouse);
 //
-//    std::cout << "Выберите точки на изображении. Нажмите клавишу для завершения.\n";
-//
-//    while (true)
-//    {
-//        char key = cv::waitKey(0);
-//        
-//        if (key)
-//        {
-//            break;
-//        }
-//    }
-//
-//    std::cout << "Выбранные точки:\n";
-//
-//    for (int i = 0; i < selectedPoints.size(); i++)
-//    {
-//        std::cout << "(" << selectedPoints[i].x << ", " << selectedPoints[i].y << ")\n";
-//    }
-//
-//    // Преобразуем выбранные точки в KeyPoint для дальнейшего использования
-//    std::vector<cv::KeyPoint> templateKeypoints, mainImgKeypoints;
-//
-//    /*for (int i = 0; i < selectedPoints.size(); i++)
-//    {
-//        templateKeypoints.emplace_back(cv::KeyPoint(selectedPoints[i].x, selectedPoints[i].y, 10)); // Указываем координаты и размер
-//    }*/
-//
+//	std::vector<cv::KeyPoint> templateKeypoints, mainImgKeypoints;
 //    cv::Mat templateDescriptors, mainImgDescriptors;
+//
 //    cv::Ptr<cv::ORB> orb = cv::ORB::create(
 //        		500,			        // Максимальное количество ключевых точек
 //        		1.2f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
@@ -681,7 +643,7 @@
 //
 //    // Если отношение расстояний меньше заданного порога 
 //    // (обычно 0.7 или 0.75), совпадение считается хорошим
-//    const float ratioThresh = 0.8f; // 0.7f - default
+//    const float ratioThresh = 0.75f; // 0.7f - default
 //
 //    std::vector<cv::DMatch> goodMatchesKnn;
 //
@@ -821,20 +783,42 @@
 //
 //    // Определяем размер изображения после преобразования
 //    cv::Rect2f bbox = cv::RotatedRect(cv::Point2f(), copyMainImg.size(), angle).boundingRect();
-//    rotationMatrix.at<double>(0, 2) += bbox.width / 2.0 - copyMainImg.cols / 2.0;
-//    rotationMatrix.at<double>(1, 2) += bbox.height / 2.0 - copyMainImg.rows / 2.0;
+//    rotationMatrix.at<double>(0, 2) += bbox.width / 2.0 - center.x;
+//    rotationMatrix.at<double>(1, 2) += bbox.height / 2.0 - center.y;
 //
 //    // Применяем поворот
 //    cv::Mat restoredImg;
 //    warpAffine(copyMainImg, restoredImg, rotationMatrix, bbox.size());
-//
 //    imshow("FINAL rotated image", restoredImg);
+//
+//	cv::Mat resultRotation;
+//	cv::matchTemplate(restoredImg, templateImg, resultRotation, cv::TM_CCOEFF_NORMED);
+//
+//	double minValRotation, maxValRotation;
+//	cv::Point minLocRotation, maxLocRotation;
+//	cv::minMaxLoc(resultRotation, &minValRotation, &maxValRotation, &minLocRotation, &maxLocRotation);
+//
+//	std::cout << "Шаблонное совпадение (максимальная корреляция) после поворота: " << maxValRotation << "\n";
+//
+//	// Размер шаблона
+//	cv::Size templateSizeRotation = templateImg.size();
+//
+//	// Рисуем прямоугольник на оригинальном изображении
+//	cv::rectangle(
+//		restoredImg,
+//		maxLocRotation,																								// Верхний левый угол
+//		cv::Point(maxLocRotation.x + templateSizeRotation.width, maxLocRotation.y + templateSizeRotation.height),   // Нижний правый угол
+//		cv::Scalar(50, 100, 180),                                                      
+//		3																											// Толщина линии
+//		);
+//
+//	cv::imshow("Detected Template Area Rotation", restoredImg);
 //
 //    cv::waitKey(0);
 //
 //    return 0;
 //}
-//
+
 
 
 
@@ -1107,48 +1091,176 @@
 //}
 
 
-// ===== New Filters =====
-int main() 
-{
-	setlocale(LC_ALL, "Russian");
-	const char* imgFile = "images/HD-CHIP-SURFACE.jpg";
-	// Загрузка изображения
-	cv::Mat image = cv::imread(imgFile, cv::IMREAD_GRAYSCALE);
+//// ===== New Filters =====
+//int main() 
+//{
+//	setlocale(LC_ALL, "Russian");
+//	const char* imgFile = "images/HD-CHIP-SURFACE.jpg";
+//	// Загрузка изображения
+//	cv::Mat image = cv::imread(imgFile, cv::IMREAD_GRAYSCALE);
+//
+//	if (image.empty()) 
+//	{
+//		std::cerr << "Ошибка: не удалось загрузить изображение!" << std::endl;
+//		return -1;
+//	}
+//
+//	// 1. Применение фильтра Лапласа
+//	cv::Mat laplacian, absLaplacian;
+//	cv::Laplacian(image, laplacian, CV_16S, 3); // Размер ядра: 3x3
+//	cv::convertScaleAbs(laplacian, absLaplacian); // Преобразование в 8-битное изображение
+//
+//	// 2. Применение фильтра Собеля
+//	cv::Mat gradX, gradY, sobelCombined;
+//	cv::Sobel(image, gradX, CV_16S, 1, 0); // Градиент по оси X
+//	cv::Sobel(image, gradY, CV_16S, 0, 1); // Градиент по оси Y
+//	cv::convertScaleAbs(gradX, gradX); // Преобразование в 8-битное изображение
+//	cv::convertScaleAbs(gradY, gradY);
+//
+//	// 3. Эрозия и дилатация
+//	cv::Mat erodeImg, dilateImg;
+//	cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+//	cv::erode(image, erodeImg, kernel);
+//	cv::dilate(image, dilateImg, kernel);
+//
+//	// Объединение градиентов
+//	cv::addWeighted(gradX, 0.5, gradY, 0.5, 0, sobelCombined);
+//
+//	// Отображение результатов
+//	cv::imshow("Original Image", image);
+//	cv::imshow("Laplacian Filter", absLaplacian);
+//	cv::imshow("Sobel Filter", sobelCombined);
+//	cv::imshow("Erode Filter", erodeImg);
+//	cv::imshow("Dilate Filter", dilateImg);
+//
+//	cv::waitKey(0);
+//	return 0;
+//}
 
-	if (image.empty()) 
+
+
+
+// ===== Select ROI by mouse  MODIFIED=====
+
+void setPointInImage(const int width, const int height, int& x, int& y)
+{
+    if (x > width)
+    {
+        x = width;
+    }
+
+    if (x < 0)
+    {
+        x = 0;
+    }
+
+    if (y > height)
+    {
+        y = height;
+    }
+
+    if (y < 0)
+    {
+        y = 0;
+    }
+}
+
+bool isDrawing = false;
+cv::Mat templateImg, mainImg, tempImg;
+cv::Point startPoint, centerPoint, endPoint;
+const char* selectRoiWindow = "Select ROI RECT";
+
+void onMouse(int event, int x, int y, int, void* data) 
+{
+    switch (event) 
+    {
+    case cv::EVENT_LBUTTONDOWN:
+        isDrawing = true;
+        startPoint = cv::Point(x, y);
+        cv::circle(tempImg, startPoint, 5, cv::Scalar(0, 255, 0), -1);
+
+        break;
+
+    case cv::EVENT_MOUSEMOVE:
+		tempImg = mainImg.clone();
+
+        if (isDrawing)
+        {
+            setPointInImage(tempImg.cols, tempImg.rows, x, y);
+
+            endPoint = cv::Point(x, y);
+
+            cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+        }
+		cv::imshow(selectRoiWindow, tempImg);
+        break;
+
+    case cv::EVENT_LBUTTONUP:
+        isDrawing = false;
+
+        setPointInImage(tempImg.cols, tempImg.rows, x, y);
+        endPoint = cv::Point(x, y);
+
+        cv::rectangle(tempImg, startPoint, endPoint, cv::Scalar(0, 255, 0), 2);
+        cv::circle(tempImg, endPoint, 5, cv::Scalar(0, 255, 0), -1);
+
+        centerPoint = cv::Point((startPoint.x + endPoint.x) / 2, (startPoint.y + endPoint.y) / 2);
+
+        cv::circle(tempImg, centerPoint, 15, cv::Scalar(255, 0, 0), -1);
+		cv::imshow(selectRoiWindow, tempImg);
+        break;
+    }
+}
+
+int main()
+{
+    setlocale(LC_ALL, "Russian");
+	cv::VideoCapture capture;
+
+	cv::namedWindow(selectRoiWindow);
+	cv::setMouseCallback(selectRoiWindow, onMouse);
+
+	if (!capture.open(0))
 	{
-		std::cerr << "Ошибка: не удалось загрузить изображение!" << std::endl;
 		return -1;
 	}
 
-	// 1. Применение фильтра Лапласа
-	cv::Mat laplacian, absLaplacian;
-	cv::Laplacian(image, laplacian, CV_16S, 3); // Размер ядра: 3x3
-	cv::convertScaleAbs(laplacian, absLaplacian); // Преобразование в 8-битное изображение
+	capture.open(0);
 
-	// 2. Применение фильтра Собеля
-	cv::Mat gradX, gradY, sobelCombined;
-	cv::Sobel(image, gradX, CV_16S, 1, 0); // Градиент по оси X
-	cv::Sobel(image, gradY, CV_16S, 0, 1); // Градиент по оси Y
-	cv::convertScaleAbs(gradX, gradX); // Преобразование в 8-битное изображение
-	cv::convertScaleAbs(gradY, gradY);
+    while (true)
+    {
+		capture >> mainImg;
+		cv::cvtColor(mainImg, mainImg, cv::COLOR_BGR2RGB);
+		tempImg = mainImg.clone();
+		
+        cv::imshow(selectRoiWindow, tempImg);
 
-	// 3. Эрозия и дилатация
-	cv::Mat erodeImg, dilateImg;
-	cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-	cv::erode(image, erodeImg, kernel);
-	cv::dilate(image, dilateImg, kernel);
+        char key = cv::waitKey(1);
 
-	// Объединение градиентов
-	cv::addWeighted(gradX, 0.5, gradY, 0.5, 0, sobelCombined);
+        if (key == 'q' || key == 27) 
+        {
+            break;
+        }
+    }
 
-	// Отображение результатов
-	cv::imshow("Original Image", image);
-	cv::imshow("Laplacian Filter", absLaplacian);
-	cv::imshow("Sobel Filter", sobelCombined);
-	cv::imshow("Erode Filter", erodeImg);
-	cv::imshow("Dilate Filter", dilateImg);
+	cv::setMouseCallback(selectRoiWindow, NULL);
 
-	cv::waitKey(0);
-	return 0;
+    // Min задаёт верхний левый угол прямоугольника
+    int x1 = std::min(startPoint.x, endPoint.x);
+    int y1 = std::min(startPoint.y, endPoint.y);
+    int x2 = std::max(startPoint.x, endPoint.x);
+    int y2 = std::max(startPoint.y, endPoint.y);
+
+    cv::Rect roiRect(x1, y1, x2 - x1, y2 - y1);
+    cv::Mat imageRoi = mainImg(roiRect);
+
+    cv::imshow("ROI image", imageRoi);
+
+    cv::imshow("Main image", mainImg);
+
+	cv::imshow("Temp image", tempImg);
+
+    cv::waitKey(0);
+
+    return 0;
 }

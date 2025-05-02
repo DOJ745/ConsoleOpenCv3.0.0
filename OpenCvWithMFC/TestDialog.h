@@ -67,6 +67,7 @@ private:
 	OrbMatcher* m_orbMatcher;
 
 	static UINT VideoThread(LPVOID pParam);
+	static UINT OrbRotationMatcherThread(LPVOID pParam);
 	static void MouseCallback(int event, int x, int y, int flags, void* userdata);
 
 	void CloneFrame(const cv::Mat& source, cv::Mat& destination);

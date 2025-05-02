@@ -182,3 +182,42 @@ void FeatureMatcher::loadCompareImage(const std::string& filename)
 		normalizeCompareImage();
 	}
 }
+
+void FeatureMatcher::matchTemplate(int compareMethod /*= cv::TM_CCOEFF_NORMED*/)
+{
+	// Создание результирующего массива для хранения результатов сопоставления
+	cv::Mat result;
+	/*int result_cols = m_mainImage.cols - m_compareImage.cols + 1;
+	int result_rows = m_mainImage.rows - m_compareImage.rows + 1;
+	result.create(result_rows, result_cols, CV_32FC1);*/
+
+	// Выполнение сопоставления шаблонов
+	//int compareMethod = cv::TM_CCOEFF_NORMED;
+	//cv::TM_CCORR_NORMED;
+	//cv::TM_SQDIFF_NORMED; // 0,01 - 0,05 - good
+	//cv::TM_CCOEFF_NORMED; // traditional from 0.01 to 1.00
+	cv::matchTemplate(m_mainImage, m_compareImage, result, compareMethod);
+
+	// Поиск максимального совпадения
+	double minVal, maxVal;
+	cv::Point minLoc, maxLoc;
+	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+
+	// Отрисовка прямоугольника вокруг найденного совпадения
+	cv::rectangle(m_mainImage, maxLoc, cv::Point(maxLoc.x + m_compareImage.cols, maxLoc.y + m_compareImage.rows), cv::Scalar(0, 255, 0), 2);
+	cv::rectangle(m_mainImage, minLoc, cv::Point(minLoc.x + m_compareImage.cols, minLoc.y + m_compareImage.rows), cv::Scalar(15, 100, 130), 2);
+}
+
+void FeatureMatcher::normalizeImage(cv::Mat& img)
+{
+	double minVal = 0;
+	double maxVal = 0;
+
+	if (img.channels() == 3)
+	{
+		changeColorScheme(img, cv::COLOR_BGR2GRAY);
+	}
+
+	cv::minMaxLoc(img, &minVal, &maxVal);
+	cv::normalize(img, img, 0, 255, cv::NORM_MINMAX);
+}

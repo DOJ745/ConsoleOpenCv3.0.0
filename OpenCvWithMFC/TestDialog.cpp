@@ -232,6 +232,8 @@ BOOL TestDialog::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
 
+	// Дополнительная инициализация
+
 	int newX = 0; 
 	int newY = 0;
 
@@ -262,8 +264,8 @@ BOOL TestDialog::OnInitDialog()
 		return FALSE;
 	}
 
-	const unsigned int defaultFrameWidth = 1280;
-	const unsigned int defaultFrameHeight = 1024;
+	const unsigned int defaultFrameWidth = 800;
+	const unsigned int defaultFrameHeight = 600;
 
 	if (!m_videoCapture.set(cv::CAP_PROP_FRAME_WIDTH, defaultFrameWidth))
 	{
@@ -313,7 +315,6 @@ BOOL TestDialog::OnInitDialog()
 	}
 
 	m_akazeMatcher = new AkazeMatcher();
-	m_orbMatcher = new OrbMatcher();
 
 	m_akazeMatcher->createDetector(m_akazeThreshold
 		, m_akazeNumberOctaves
@@ -322,10 +323,15 @@ BOOL TestDialog::OnInitDialog()
 		, m_akazeDescriptorChannels
 		, m_akazeDescriptorType);
 
+	m_orbMatcher = new OrbMatcher();
+	m_orbMatcher->setMaxDistance(50);
+	m_orbMatcher->createDetector();
+
+
 	// IMPORTANT: OpenCV create as many threads as you have cores in your CPU
 	//cv::setNumThreads(0);
 
-	cv::setNumThreads(-1);
+	//cv::setNumThreads(-1);
 
 	return TRUE;
 }
@@ -405,6 +411,8 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 
 		// Вставляем масштабированное изображение в центр области
 		resizedFrame.copyTo(letterboxFrame(cv::Rect(xOffset, yOffset, newWidth, newHeight)));
+		tempFrame.release();
+		resizedFrame.release();
 
 		// Обработка изображения
 		// 1. Удаление шумов
@@ -454,11 +462,23 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 		EnterCriticalSection(&dlg->m_criticalSection);
 
 		dlg->m_currentFrame = finalFiltered.clone();
+		finalFiltered.release();
 
 		if (!dlg->m_isDrawing) 
 		{
 			//dlg->m_rectFrame = finalFiltered.clone();
 			dlg->m_rectFrame = dlg->m_currentFrame.clone();
+
+			dlg->m_orbMatcher->setMainImage(dlg->m_rectFrame);
+			dlg->m_orbMatcher->setCompareImage(cv::imread(IMG_ROI_NAME, cv::IMREAD_COLOR));
+
+			//dlg->m_orbMatcher->detectAndComputeMainImg();
+			//dlg->m_orbMatcher->detectAndComputeCompareImg();
+			//dlg->m_orbMatcher->matchFeaturesDistance();
+			//dlg->m_orbMatcher->rotateAndCompareByDistance();
+
+			dlg->m_orbMatcher->matchTemplate();
+			dlg->m_rectFrame = dlg->m_orbMatcher->getMainImage().clone();
 		}
 
 		if (!dlg->m_rectFrame.empty()) 
@@ -700,81 +720,80 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		return;
 	}
 
-	cv::Mat tempCompareImg = cv::imread(IMG_ROI_NAME, cv::IMREAD_COLOR);
-	cv::Mat tempMainImg = cv::imread(IMG_COMPARE_FRAME_NAME, cv::IMREAD_COLOR);
+	//cv::Mat tempCompareImg = cv::imread(IMG_ROI_NAME, cv::IMREAD_COLOR);
+	//cv::Mat tempMainImg = cv::imread(IMG_COMPARE_FRAME_NAME, cv::IMREAD_COLOR);
 
-	//int kernelSize = 3; // positive and odd
-	//cv::Laplacian(tempCompareImg, tempCompareImg, CV_16S, kernelSize);
-	//cv::convertScaleAbs(tempCompareImg, tempCompareImg);
+	////int kernelSize = 3; // positive and odd
+	////cv::Laplacian(tempCompareImg, tempCompareImg, CV_16S, kernelSize);
+	////cv::convertScaleAbs(tempCompareImg, tempCompareImg);
 
-	//cv::Laplacian(tempMainImg, tempMainImg, CV_16S, kernelSize);
-	//cv::convertScaleAbs(tempMainImg, tempMainImg);
+	////cv::Laplacian(tempMainImg, tempMainImg, CV_16S, kernelSize);
+	////cv::convertScaleAbs(tempMainImg, tempMainImg);
 
-	//cv::imshow("Compare Laplacian", tempCompareImg);
-	//cv::imshow("Main Laplacian", tempMainImg);
+	////cv::imshow("Compare Laplacian", tempCompareImg);
+	////cv::imshow("Main Laplacian", tempMainImg);
 
-	//for (;;)
-	//{
-	//	int key = cv::waitKey(0);
-	//	if (key > 0)
-	//	{
-	//	   cv::destroyWindow("Compare Laplacian");
-	//	   cv::destroyWindow("Main Laplacian");
+	////for (;;)
+	////{
+	////	int key = cv::waitKey(0);
+	////	if (key > 0)
+	////	{
+	////	   cv::destroyWindow("Compare Laplacian");
+	////	   cv::destroyWindow("Main Laplacian");
 
-	//	   break;
-	//	}
-	//}
+	////	   break;
+	////	}
+	////}
 
-	//// Эрозия
-	//cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-	//cv::erode(tempCompareImg, tempCompareImg, kernel);
-	//cv::erode(tempMainImg, tempMainImg, kernel);
+	////// Эрозия
+	////cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+	////cv::erode(tempCompareImg, tempCompareImg, kernel);
+	////cv::erode(tempMainImg, tempMainImg, kernel);
 
-	//// Дилатация
-	//cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
-	//cv::dilate(tempCompareImg, tempCompareImg, kernel);
-	//cv::dilate(tempMainImg, tempMainImg, kernel);
+	////// Дилатация
+	////cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+	////cv::dilate(tempCompareImg, tempCompareImg, kernel);
+	////cv::dilate(tempMainImg, tempMainImg, kernel);
 
 
-	// Создание результирующего массива для хранения результатов сопоставления
-	cv::Mat result;
-	int result_cols = tempMainImg.cols - tempCompareImg.cols + 1;
-	int result_rows = tempMainImg.rows - tempCompareImg.rows + 1;
-	result.create(result_rows, result_cols, CV_32FC1);
+	//// Создание результирующего массива для хранения результатов сопоставления
+	//cv::Mat result;
+	//int result_cols = tempMainImg.cols - tempCompareImg.cols + 1;
+	//int result_rows = tempMainImg.rows - tempCompareImg.rows + 1;
+	//result.create(result_rows, result_cols, CV_32FC1);
 
-	// Выполнение сопоставления шаблонов
-	int compareMethod = cv::TM_CCORR_NORMED;
-	//cv::TM_SQDIFF_NORMED; // 0,01 - 0,05 - good
-	//cv::TM_CCOEFF_NORMED; // traditional from 0.01 to 1.00
-	cv::matchTemplate(tempMainImg, tempCompareImg, result, compareMethod);
+	//// Выполнение сопоставления шаблонов
+	//int compareMethod = cv::TM_CCOEFF_NORMED;
+	////cv::TM_CCORR_NORMED;
+	////cv::TM_SQDIFF_NORMED; // 0,01 - 0,05 - good
+	////cv::TM_CCOEFF_NORMED; // traditional from 0.01 to 1.00
+	//cv::matchTemplate(tempMainImg, tempCompareImg, result, compareMethod);
 
-	// Поиск максимального совпадения
-	double minVal, maxVal;
-	cv::Point minLoc, maxLoc;
-	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+	//// Поиск максимального совпадения
+	//double minVal, maxVal;
+	//cv::Point minLoc, maxLoc;
+	//cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
 
-	// Отрисовка прямоугольника вокруг найденного совпадения
-	cv::rectangle(tempMainImg, maxLoc, cv::Point(maxLoc.x + tempCompareImg.cols, maxLoc.y + tempCompareImg.rows), cv::Scalar(0, 255, 0), 2);
-	cv::rectangle(tempMainImg, minLoc, cv::Point(minLoc.x + tempCompareImg.cols, minLoc.y + tempCompareImg.rows), cv::Scalar(15, 100, 130), 2);
+	//// Отрисовка прямоугольника вокруг найденного совпадения
+	//cv::rectangle(tempMainImg, maxLoc, cv::Point(maxLoc.x + tempCompareImg.cols, maxLoc.y + tempCompareImg.rows), cv::Scalar(0, 255, 0), 2);
+	//cv::rectangle(tempMainImg, minLoc, cv::Point(minLoc.x + tempCompareImg.cols, minLoc.y + tempCompareImg.rows), cv::Scalar(15, 100, 130), 2);
 
-	// Отображение результатов
-	std::string wndName = "Max match: " + std::to_string(static_cast<long double>(maxVal)) + std::string(". Min match: ") + std::to_string(static_cast<long double>(minVal));
-	cv::imshow(wndName, tempMainImg);
-	cv::waitKey(0);
+	//// Отображение результатов
+	//std::string wndName = "Max match: " + std::to_string(static_cast<long double>(maxVal)) + std::string(". Min match: ") + std::to_string(static_cast<long double>(minVal));
+	//cv::imshow(wndName, tempMainImg);
+	//cv::waitKey(0);
 
-	/*m_orbMatcher->setMaxDistance(maxDistance);
+	m_orbMatcher->setMaxDistance(maxDistance);
 	m_orbMatcher->loadMainImage(mainImgPath);
 	m_orbMatcher->loadCompareImage(compareImgPath);
 	m_orbMatcher->performAllDistance();
-	//m_orbMatcher->performAllLowe();
-	//m_orbMatcher->performAllCrossCheck();
+	m_orbMatcher->rotateAndCompareByDistance();
 
-	m_akazeMatcher->loadMainImage(mainImgPath);
+	/*m_akazeMatcher->loadMainImage(mainImgPath);
 	m_akazeMatcher->loadCompareImage(compareImgPath);
 	m_akazeMatcher->setMaxDistance(maxDistance);
 	m_akazeMatcher->performAllDistance();
-	//m_akazeMatcher->performAllLowe();
-	//m_akazeMatcher->performAllCrossCheck();
+	m_akazeMatcher->rotateAndCompareByDistance();*/
 
 	for (;;)
 	{
@@ -784,9 +803,9 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 		if (key >= 0) 
 		{
 			m_orbMatcher->destroyWindow();
-			m_akazeMatcher->destroyWindow();
+			//m_akazeMatcher->destroyWindow();
 		}
-	}*/
+	}
 }
 
 
