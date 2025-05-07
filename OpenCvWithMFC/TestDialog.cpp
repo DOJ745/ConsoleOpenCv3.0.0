@@ -48,30 +48,28 @@ void AttachOpenCVWindowToMFC(HWND hwndDialog)
 
 	// Ќайти окно OpenCV (контейнер вместе с элементом, где отображаютс€ кадры)
 	HWND hwndOpenCV = static_cast<HWND>(cvGetWindowHandle(OPEN_CV_WINDOW_NAME.c_str()));
+
 	HWND parentHwndOpenCV = ::GetParent(hwndOpenCV);
 
 	CWnd* ptrWindowContainer = CWnd::FromHandle(hwndDialog)->GetDlgItem(IDC_OPENCV_CONTAINER);
-	HWND windowContainerHwnd; 
 
 	if (!ptrWindowContainer) 
 	{
 		return;
 	}
-	else
-	{
-		windowContainerHwnd = ptrWindowContainer->GetSafeHwnd();
 
-		::GetClientRect(windowContainerHwnd, &windowContainer);
+	HWND windowContainerHwnd = ptrWindowContainer->GetSafeHwnd(); 
 
-		::SetWindowPos(windowContainerHwnd
-			, hwndDialog
-			, 0
-			, 0
-			, windowContainer.Width()
-			, windowContainer.Height()
-			, SWP_NOZORDER
-			);
-	}
+	::GetClientRect(windowContainerHwnd, &windowContainer);
+
+	::SetWindowPos(windowContainerHwnd
+		, hwndDialog
+		, 0
+		, 0
+		, windowContainer.Width()
+		, windowContainer.Height()
+		, SWP_NOZORDER
+		);
 
 	if (parentHwndOpenCV != NULL) 
 	{
@@ -79,6 +77,7 @@ void AttachOpenCVWindowToMFC(HWND hwndDialog)
 		int maxWidth = clientParentRect.Width();
 		int maxHeight = clientParentRect.Height();
 
+		// –азрешение кадра камеры по умолчанию
 		int minWidth = 1280;
 		int minHeight = 1024;
 
@@ -99,19 +98,22 @@ void AttachOpenCVWindowToMFC(HWND hwndDialog)
 
 		LONG style = GetWindowLong(parentHwndOpenCV, GWL_STYLE);
 
-		// ”бираем заголовок и предотвращаем перемещение
+		// ”бираем заголовок и предотвращаем перемещение при помощи стилей WS_CHILD и DS_MODALFRAME
 		style &= ~(WS_POPUP | WS_CAPTION | WS_THICKFRAME);
 		style |= WS_CHILD | DS_MODALFRAME;
 
 		::SetWindowLongPtr(parentHwndOpenCV, GWL_STYLE, style);
+
+		const int defaultContainerWidth = 800;
+		const int defaultContainerHeight = 600;
 
 		// ”станавливаем положение окна OpenCV относительно контейнера MFC
 		::SetWindowPos(parentHwndOpenCV
 			, NULL
 			, 0
 			, 0
-			, 800
-			, 600
+			, defaultContainerWidth
+			, defaultContainerHeight
 			, SWP_NOZORDER);
 	}
 	else
@@ -265,7 +267,7 @@ BOOL TestDialog::OnInitDialog()
 		m_videoCapture.release();
 	}
 
-	m_videoCapture = cv::VideoCapture(0);
+	m_videoCapture = cv::VideoCapture(0 + cv::CAP_DSHOW);
 
 	if (!m_videoCapture.isOpened()) 
 	{
@@ -276,8 +278,9 @@ BOOL TestDialog::OnInitDialog()
 		return FALSE;
 	}
 
-	const unsigned int defaultFrameWidth = 800;
-	const unsigned int defaultFrameHeight = 600;
+	// ћаксимальное разрешение камеры: 1280x1024
+	const unsigned int defaultFrameWidth = 1280;
+	const unsigned int defaultFrameHeight = 1024;
 
 	if (!m_videoCapture.set(cv::CAP_PROP_FRAME_WIDTH, defaultFrameWidth))
 	{
@@ -319,6 +322,8 @@ BOOL TestDialog::OnInitDialog()
 	}
 
 	// NOTE: половина кристалла распознаЄтс€ лучше, чем кристалл целиком (около 80% по AKAZE)
+	const double maxDistance = 50.0;
+
 	m_akazeMatcher = new AkazeMatcher();
 
 	m_akazeMatcher->createDetector(m_akazeThreshold
@@ -329,7 +334,7 @@ BOOL TestDialog::OnInitDialog()
 		, m_akazeDescriptorType);
 
 	m_orbMatcher = new OrbMatcher();
-	m_orbMatcher->setMaxDistance(50);
+	m_orbMatcher->setMaxDistance(maxDistance);
 	m_orbMatcher->createDetector();
 
 
@@ -442,6 +447,8 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 
 		EnterCriticalSection(&dlg->m_criticalSection);
 
+		// NOTE: в MVS используютс€ blob фильтры, нормализаци€ и бинаризаци€. “акже использовалась эрози€, но она закоментирована
+
 		if (dlg->m_makeGray)
 		{
 			cv::cvtColor(letterboxFrame, finalFiltered, cv::COLOR_BGR2GRAY);
@@ -492,25 +499,12 @@ UINT TestDialog::VideoThread(LPVOID pParam)
 			cv::Canny(finalFiltered, finalFiltered, dlg->m_cannyThreshold1, dlg->m_cannyThreshold2);
 		}
 
-		LeaveCriticalSection(&dlg->m_criticalSection);
-
-		EnterCriticalSection(&dlg->m_criticalSection);
-
 		dlg->m_currentFrame = finalFiltered.clone();
 		finalFiltered.release();
 
 		if (!dlg->m_isDrawing) 
 		{
-			//dlg->m_rectFrame = finalFiltered.clone();
 			dlg->m_rectFrame = dlg->m_currentFrame.clone();
-
-			//dlg->m_orbMatcher->setMainImage(dlg->m_rectFrame);
-			//dlg->m_orbMatcher->detectAndComputeMainImg();
-			//dlg->m_orbMatcher->detectAndComputeCompareImg();
-			//dlg->m_orbMatcher->matchFeaturesDistance();
-			//dlg->m_orbMatcher->rotateAndCompareByDistance();
-			//dlg->m_orbMatcher->matchTemplate();
-			//dlg->m_rectFrame = dlg->m_orbMatcher->getMainImage().clone();
 		}
 
 		if (!dlg->m_rectFrame.empty()) 
@@ -744,7 +738,6 @@ void TestDialog::OnEnUpdateEditClaheHeight()
 
 void TestDialog::OnBnClickedButtonTestCompareFrames()
 {
-	//const double maxDistance = 60.0;
 	std::string compareImgPath = IMG_ROI_NAME;
 	std::string mainImgPath = IMG_COMPARE_FRAME_NAME;
 
@@ -793,8 +786,6 @@ void TestDialog::OnBnClickedButtonTestCompareFrames()
 	//std::string wndName = "Max match: " + std::to_string(static_cast<long double>(maxVal)) + std::string(". Min match: ") + std::to_string(static_cast<long double>(minVal));
 	//cv::imshow(wndName, tempMainImg);
 	//cv::waitKey(0);
-
-	//m_orbMatcher->setMaxDistance(maxDistance);
 
 	m_orbMatcher->loadMainImage(mainImgPath);
 	m_orbMatcher->loadCompareImage(compareImgPath);

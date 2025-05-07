@@ -164,7 +164,7 @@ public:
 		, int firstLevel = 0
 		, int WTA_K = 2
 		, int scoreType = cv::ORB::FAST_SCORE
-		, int patchSize = 25
+		, int patchSize = 28
 		, int fastThreshold = 20)
 	{
 			m_orb = cv::ORB::create(nFeatures

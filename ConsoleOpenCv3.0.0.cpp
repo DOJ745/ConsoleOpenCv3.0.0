@@ -415,7 +415,7 @@
 
 
 
-//// ===== Basic example =====
+//// ===== Basic example with Canny and Gauss filters =====
 //int _tmain(int argc, _TCHAR* argv[])
 //{
 //	std::cout << "Hello, world!\n";
@@ -503,321 +503,330 @@
 
 
 
-//// ===== Apply Rotation by homography =====
-//
-//cv::Mat templateImg, mainImg, copyMainImg;
-//std::vector<cv::Point2f> selectedPoints;
-//
-//int main() 
-//{
-//    setlocale(LC_ALL, "Russian");
-//
-//    int imgReadMode = cv::IMREAD_GRAYSCALE;
-//    const char* templateImgFile = "images/HD-CHIP-SURFACE.jpg";
-//    const char* mainImgFile = "images/HD-CHIP-SURFACE-TURN.jpg";//"images/HD-CHIP.jpg";
-//    
-//    templateImg = cv::imread(templateImgFile, imgReadMode);
-//
-//    if (templateImg.empty())
-//    {
-//        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
-//        return -1;
-//    }
-//
-//    mainImg = cv::imread(mainImgFile, imgReadMode);
-//
-//    if (mainImg.empty())
-//    {
-//        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
-//        return -1;
-//    }
-//
-//    const double resizeTemplate = 0.5;
-//    const double resizeMain = 0.5;
-//
-//    cv::resize(templateImg, templateImg, cv::Size(), resizeTemplate, resizeTemplate, cv::INTER_AREA);
-//    cv::resize(mainImg, mainImg, cv::Size(), resizeMain, resizeMain, cv::INTER_AREA);
-//
-//    copyMainImg = mainImg.clone();
-//
-//    cv::imshow("Select Points", mainImg);
-//
-//	std::vector<cv::KeyPoint> templateKeypoints, mainImgKeypoints;
-//    cv::Mat templateDescriptors, mainImgDescriptors;
-//
-//    cv::Ptr<cv::ORB> orb = cv::ORB::create(
-//        		500,			        // Максимальное количество ключевых точек
-//        		1.2f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
-//        		10,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
-//        		10,					    // Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
-//        		0,						// Первый уровень пирамиды
-//        		2,						// WTA_K - параметр определяет количество точек в окрестности ключевой точки, которые сравниваются для генерации одного бита дескриптора
-//        		cv::ORB::FAST_SCORE,	// Метод оценки
-//        		18,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
-//        		50						// Порог отклика -  это численная величина, характеризующая "выразительность" точки
-//        	);
-//    
-//    cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
-//    akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек
-//    akaze->setNOctaves(4);                                  // Количество октав (уровней пирамиды)
-//    akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве
-//    akaze->setDescriptorSize(0);                            // Размер дескриптора (по умолчанию максимальный)
-//    akaze->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);   // Тип дескриптора
-//    
-//    try
-//    {
-//        orb->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
-//        //akaze->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
-//
-//        if (templateKeypoints.empty())
-//        {
-//            std::cerr << "Ошибка: массив ключевых точек templateKeypoints пуст!\n";
-//            return -1;
-//        }
-//    }
-//    catch (const std::exception& e)
-//    {
-//        std::cerr << "Исключение: " << e.what() << "\n";
-//    }
-//
-//    try
-//    {
-//        orb->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
-//        //akaze->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
-//        
-//        if (mainImgKeypoints.empty())
-//        {
-//            std::cerr << "Ошибка: массив ключевых точек mainImgKeypoints пуст!\n";
-//            return -1;
-//        }
-//    }
-//    catch (const std::exception& e)
-//    {
-//        std::cerr << "Исключение: " << e.what() << "\n";
-//    }
-//
-//    // Визуализация ключевых точек, найденных по алгоритму
-//    cv::Mat templateImgFoundKeypoints;
-//
-//    cv::drawKeypoints(
-//        templateImg
-//        , templateKeypoints
-//        , templateImgFoundKeypoints
-//        , cv::Scalar(0, 0, 255)
-//        , cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-//
-//    cv::imshow("Found keypoints on template image", templateImgFoundKeypoints);
-//
-//    // Сортировка совпадений по расстоянию
-//	cv::BFMatcher matcher(cv::NORM_HAMMING, true);
-//	std::vector<cv::DMatch> matches;
-//	matcher.match(templateDescriptors, mainImgDescriptors, matches);
-//
-//    std::sort(
-//        matches.begin()
-//        , matches.end()
-//        , [](const cv::DMatch& a, const cv::DMatch& b) { 
-//            return a.distance < b.distance; 
-//        });
-//
-//    std::vector<cv::DMatch> goodMatches;
-//
-//    // Фильтрация совпадений
-//    const double maxDistance = 50.0; // Порог расстояния для фильтрации по расстоянию
-//
-//    for (int i = 0; i < matches.size(); i++)
-//    {
-//        if (matches[i].distance < maxDistance)
-//        {
-//            goodMatches.push_back(matches[i]);
-//        }
-//    }
-//
-//    // Сортировка совпадений по Lowe's Ratio Test
-//    // Lowe's Ratio Test проверяет, 
-//    // является ли расстояние до лучшего совпадения 
-//    // существенно меньше расстояния до второго ближайшего совпадения
-//    cv::BFMatcher knnMatcher(cv::NORM_HAMMING);
-//    std::vector<std::vector<cv::DMatch>> knnMatches;
-//    knnMatcher.knnMatch(templateDescriptors, mainImgDescriptors, knnMatches, 2);
-//
-//    // Если отношение расстояний меньше заданного порога 
-//    // (обычно 0.7 или 0.75), совпадение считается хорошим
-//    const float ratioThresh = 0.75f; // 0.7f - default
-//
-//    std::vector<cv::DMatch> goodMatchesKnn;
-//
-//    for (int i = 0; i < knnMatches.size(); i++)
-//    {
-//        // Проверяем, есть ли хотя бы два совпадения
-//        if (knnMatches[i].size() >= 2) 
-//        { 
-//            const cv::DMatch& bestMatch = knnMatches[i][0];
-//            const cv::DMatch& secondBestMatch = knnMatches[i][1];
-//
-//            // Проверяем индексы на соответствие массивам ключевых точек
-//            if (bestMatch.queryIdx >= 0 
-//                && bestMatch.queryIdx < templateKeypoints.size() 
-//                && bestMatch.trainIdx >= 0 
-//                && bestMatch.trainIdx < mainImgKeypoints.size()) 
-//            {
-//                if (bestMatch.distance < ratioThresh * secondBestMatch.distance)
-//                {
-//                    goodMatchesKnn.push_back(bestMatch);
-//                }
-//            }
-//        }
-//    }
-//
-//    int debugSizeKnn = goodMatchesKnn.size();
-//    int debugKeypoints1Size = templateKeypoints.size();
-//    int debugKeypoints2Size = mainImgKeypoints.size();
-//    int debugSizeDistance = goodMatches.size();
-//
-//    // Визуализация совпадений
-//	cv::Mat matchedImage, matchedImageKnn;
-//
-//	cv::drawMatches(
-//        templateImg
-//		, templateKeypoints
-//		, mainImg
-//		, mainImgKeypoints
-//		, goodMatches
-//		, matchedImage
-//		, cv::Scalar::all(-1)
-//		, cv::Scalar::all(-1)
-//		, std::vector<char>()
-//		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-//
-//    cv::imshow("Matched Keypoints ORB (Distance)", matchedImage);
-//
-//    //double matchPercentage = (double)goodMatches.size() / (double)templateKeypoints.size() * 100.0;
-//
-//    double matchPercentage = (double)goodMatches.size() / (double)mainImgKeypoints.size() * 100.0;
-//
-//    std::cout << "Общее количество ключевых точек в шаблоне: " << templateKeypoints.size() << "\n";
-//    std::cout << "Общее количество ключевых точек в сравниваемом изображении: " << mainImgKeypoints.size() << "\n";
-//	std::cout << "Найдено совпадений (фильтрация по расстоянию): " << matches.size() << "\n";
-//	std::cout << "Количество хороших совпадений: " << goodMatches.size() << "\n";
-//	std::cout << "Процент совпадения: " << matchPercentage << "%" << "\n";
-//
-//    cv::drawMatches(
-//        templateImg
-//        , templateKeypoints
-//        , mainImg
-//        , mainImgKeypoints
-//        , goodMatchesKnn
-//        , matchedImageKnn
-//        , cv::Scalar::all(-1)
-//        , cv::Scalar::all(-1)
-//        , std::vector<char>()
-//        , cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-//
-//    cv::imshow("Matched Keypoints ORB (KNN)", matchedImageKnn);
-//
-//    //double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)templateKeypoints.size() * 100.0;
-//    
-//    double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)mainImgKeypoints.size() * 100.0;
-//
-//    std::cout << "Найдено совпадений (фильтрация по KNN): " << knnMatches.size() << "\n";
-//    std::cout << "Количество хороших совпадений: " << goodMatchesKnn.size() << "\n";
-//    std::cout << "Процент совпадения: " << matchPercentageKnn << "%" << "\n";
-//
-//	cv::Mat result;
-//	cv::matchTemplate(mainImg, templateImg, result, cv::TM_CCOEFF_NORMED);
-//
-//	double minVal, maxVal;
-//	cv::Point minLoc, maxLoc;
-//	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
-//
-//    std::cout << "Шаблонное совпадение (максимальная корреляция): " << maxVal << "\n";
-//
-//    // Пороговое значение корреляции
-//	if (maxVal > 0.8) 
-//	{ 
-//		std::cout << "Совпадение подтверждено через шаблонное сравнение." << "\n";
-//	}
-//	else 
-//	{
-//        std::cout << "Совпадение не подтверждено.\n";
-//	}
-//
-//    // Размер шаблона
-//    cv::Size templateSize = templateImg.size();
-//
-//    // Рисуем прямоугольник на оригинальном изображении
-//    cv::rectangle(
-//        mainImg,
-//        maxLoc,                                                                     // Верхний левый угол
-//        cv::Point(maxLoc.x + templateSize.width, maxLoc.y + templateSize.height),   // Нижний правый угол
-//        cv::Scalar(0, 0, 255),                                                      
-//        2                                                                           // Толщина линии
-//    );
-//
-//    cv::imshow("Detected Template Area", mainImg);
-//
-//    std::vector<cv::Point2f> points1, points2;
-//
-//    for (size_t i = 0; i < goodMatches.size(); i++)
-//    {
-//        points1.push_back(templateKeypoints[goodMatches[i].queryIdx].pt);
-//        points2.push_back(mainImgKeypoints[goodMatches[i].trainIdx].pt);
-//    }
-//
-//    cv::Mat homography = findHomography(points1, points2, cv::RANSAC);
-//
-//    if (homography.empty())
-//    {
-//        std::cout << "Гомография не найдена.\n";
-//        return -1;
-//    }
-//
-//    // 5. Извлечение угла поворота
-//    double angle = atan2(homography.at<double>(1, 0), homography.at<double>(0, 0)) * 180.0 / CV_PI;
-//
-//    std::cout << "Угол поворота: " << angle << " градусов\n";
-//
-//    cv::Point2f center(copyMainImg.cols / 2.0F, copyMainImg.rows / 2.0F);
-//
-//    cv::Mat rotationMatrix = getRotationMatrix2D(center, angle, 1.0);
-//
-//    // Определяем размер изображения после преобразования
-//    cv::Rect2f bbox = cv::RotatedRect(cv::Point2f(), copyMainImg.size(), angle).boundingRect();
-//    rotationMatrix.at<double>(0, 2) += bbox.width / 2.0 - center.x;
-//    rotationMatrix.at<double>(1, 2) += bbox.height / 2.0 - center.y;
-//
-//    // Применяем поворот
-//    cv::Mat restoredImg;
-//    warpAffine(copyMainImg, restoredImg, rotationMatrix, bbox.size());
-//    imshow("FINAL rotated image", restoredImg);
-//
-//	cv::Mat resultRotation;
-//	cv::matchTemplate(restoredImg, templateImg, resultRotation, cv::TM_CCOEFF_NORMED);
-//
-//	double minValRotation, maxValRotation;
-//	cv::Point minLocRotation, maxLocRotation;
-//	cv::minMaxLoc(resultRotation, &minValRotation, &maxValRotation, &minLocRotation, &maxLocRotation);
-//
-//	std::cout << "Шаблонное совпадение (максимальная корреляция) после поворота: " << maxValRotation << "\n";
-//
-//	// Размер шаблона
-//	cv::Size templateSizeRotation = templateImg.size();
-//
-//	// Рисуем прямоугольник на оригинальном изображении
-//	cv::rectangle(
-//		restoredImg,
-//		maxLocRotation,																								// Верхний левый угол
-//		cv::Point(maxLocRotation.x + templateSizeRotation.width, maxLocRotation.y + templateSizeRotation.height),   // Нижний правый угол
-//		cv::Scalar(50, 100, 180),                                                      
-//		3																											// Толщина линии
-//		);
-//
-//	cv::imshow("Detected Template Area Rotation", restoredImg);
-//
-//    cv::waitKey(0);
-//
-//    return 0;
-//}
+// ===== Apply Rotation by homography =====
+
+cv::Mat templateImg, mainImg, copyMainImg;
+std::vector<cv::Point2f> selectedPoints;
+
+int main() 
+{
+    setlocale(LC_ALL, "Russian");
+
+    int imgReadMode = cv::IMREAD_GRAYSCALE;
+    const char* templateImgFile = "images/HD-CHIP-SURFACE.jpg";
+    const char* mainImgFile = "images/HD-CHIP-SURFACE-TURN.jpg";//"images/HD-CHIP.jpg";
+    
+    templateImg = cv::imread(templateImgFile, imgReadMode);
+
+    if (templateImg.empty())
+    {
+        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
+        return -1;
+    }
+
+    mainImg = cv::imread(mainImgFile, imgReadMode);
+
+    if (mainImg.empty())
+    {
+        std::cerr << "Ошибка: не удалось загрузить изображение.\n";
+        return -1;
+    }
+
+    const double resizeTemplate = 0.5;
+    const double resizeMain = 0.5;
+
+    cv::resize(templateImg, templateImg, cv::Size(), resizeTemplate, resizeTemplate, cv::INTER_AREA);
+    cv::resize(mainImg, mainImg, cv::Size(), resizeMain, resizeMain, cv::INTER_AREA);
+
+    copyMainImg = mainImg.clone();
+
+    cv::imshow("Select Points", mainImg);
+
+	std::vector<cv::KeyPoint> templateKeypoints, mainImgKeypoints;
+    cv::Mat templateDescriptors, mainImgDescriptors;
+
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(
+        		500,			        // Максимальное количество ключевых точек
+        		1.2f,					// Масштабный фактор пирамиды (Этот параметр определяет, насколько изображение уменьшается на каждом уровне пирамиды - уменьшение ускоряет обработку)
+        		10,						// Количество уровней пирамиды	(Этот параметр определяет глубину пирамиды. Чем больше уровней, тем больше требуется вычислений)
+        		10,					    // Размер окна	(Этот параметр задаёт размер области для поиска ключевых точек. Большие значения полезны для больших изображений)
+        		0,						// Первый уровень пирамиды
+        		2,						// WTA_K - параметр определяет количество точек в окрестности ключевой точки, которые сравниваются для генерации одного бита дескриптора
+        		cv::ORB::FAST_SCORE,	// Метод оценки
+        		18,						// Радиус граничной области	(Этот параметр определяет размер патча вокруг каждой ключевой точки, используемого для вычисления дескрипторов - чем больше, тем больше обрабатывается деталей)
+        		50						// Порог отклика -  это численная величина, характеризующая "выразительность" точки
+        	);
+    
+    cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
+    akaze->setThreshold(0.001f);                            // Уровень порога для подавления слабых ключевых точек
+    akaze->setNOctaves(4);                                  // Количество октав (уровней пирамиды)
+    akaze->setNOctaveLayers(4);                             // Количество слоёв в каждой октаве
+    akaze->setDescriptorSize(0);                            // Размер дескриптора (по умолчанию максимальный)
+    akaze->setDescriptorType(cv::AKAZE::DESCRIPTOR_MLDB);   // Тип дескриптора
+    
+    try
+    {
+        orb->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
+        //akaze->detectAndCompute(templateImg, cv::Mat(), templateKeypoints, templateDescriptors);
+
+        if (templateKeypoints.empty())
+        {
+            std::cerr << "Ошибка: массив ключевых точек templateKeypoints пуст!\n";
+            return -1;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Исключение: " << e.what() << "\n";
+    }
+
+    try
+    {
+        orb->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
+        //akaze->detectAndCompute(mainImg, cv::Mat(), mainImgKeypoints, mainImgDescriptors);
+        
+        if (mainImgKeypoints.empty())
+        {
+            std::cerr << "Ошибка: массив ключевых точек mainImgKeypoints пуст!\n";
+            return -1;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Исключение: " << e.what() << "\n";
+    }
+
+    // Визуализация ключевых точек, найденных по алгоритму
+    cv::Mat templateImgFoundKeypoints;
+
+    cv::drawKeypoints(
+        templateImg
+        , templateKeypoints
+        , templateImgFoundKeypoints
+        , cv::Scalar(0, 0, 255)
+        , cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+
+    cv::imshow("Found keypoints on template image", templateImgFoundKeypoints);
+
+    // Сортировка совпадений по расстоянию
+	cv::BFMatcher matcher(cv::NORM_HAMMING, true);
+	std::vector<cv::DMatch> matches;
+	matcher.match(templateDescriptors, mainImgDescriptors, matches);
+
+    std::sort(
+        matches.begin()
+        , matches.end()
+        , [](const cv::DMatch& a, const cv::DMatch& b) { 
+            return a.distance < b.distance; 
+        });
+
+    std::vector<cv::DMatch> goodMatches;
+
+    // Фильтрация совпадений
+    const double maxDistance = 50.0; // Порог расстояния для фильтрации по расстоянию
+
+    for (int i = 0; i < matches.size(); i++)
+    {
+        if (matches[i].distance < maxDistance)
+        {
+            goodMatches.push_back(matches[i]);
+        }
+    }
+
+    // Сортировка совпадений по Lowe's Ratio Test
+    // Lowe's Ratio Test проверяет, 
+    // является ли расстояние до лучшего совпадения 
+    // существенно меньше расстояния до второго ближайшего совпадения
+    cv::BFMatcher knnMatcher(cv::NORM_HAMMING);
+    std::vector<std::vector<cv::DMatch>> knnMatches;
+    knnMatcher.knnMatch(templateDescriptors, mainImgDescriptors, knnMatches, 2);
+
+    // Если отношение расстояний меньше заданного порога 
+    // (обычно 0.7 или 0.75), совпадение считается хорошим
+    const float ratioThresh = 0.75f; // 0.7f - default
+
+    std::vector<cv::DMatch> goodMatchesKnn;
+
+    for (int i = 0; i < knnMatches.size(); i++)
+    {
+        // Проверяем, есть ли хотя бы два совпадения
+        if (knnMatches[i].size() >= 2) 
+        { 
+            const cv::DMatch& bestMatch = knnMatches[i][0];
+            const cv::DMatch& secondBestMatch = knnMatches[i][1];
+
+            // Проверяем индексы на соответствие массивам ключевых точек
+            if (bestMatch.queryIdx >= 0 
+                && bestMatch.queryIdx < templateKeypoints.size() 
+                && bestMatch.trainIdx >= 0 
+                && bestMatch.trainIdx < mainImgKeypoints.size()) 
+            {
+                if (bestMatch.distance < ratioThresh * secondBestMatch.distance)
+                {
+                    goodMatchesKnn.push_back(bestMatch);
+                }
+            }
+        }
+    }
+
+    int debugSizeKnn = goodMatchesKnn.size();
+    int debugKeypoints1Size = templateKeypoints.size();
+    int debugKeypoints2Size = mainImgKeypoints.size();
+    int debugSizeDistance = goodMatches.size();
+
+    // Визуализация совпадений
+	cv::Mat matchedImage, matchedImageKnn;
+
+	cv::drawMatches(
+        templateImg
+		, templateKeypoints
+		, mainImg
+		, mainImgKeypoints
+		, goodMatches
+		, matchedImage
+		, cv::Scalar::all(-1)
+		, cv::Scalar::all(-1)
+		, std::vector<char>()
+		, cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+
+    cv::imshow("Matched Keypoints ORB (Distance)", matchedImage);
+
+    //double matchPercentage = (double)goodMatches.size() / (double)templateKeypoints.size() * 100.0;
+
+    double matchPercentage = (double)goodMatches.size() / (double)mainImgKeypoints.size() * 100.0;
+
+    std::cout << "Общее количество ключевых точек в шаблоне: " << templateKeypoints.size() << "\n";
+    std::cout << "Общее количество ключевых точек в сравниваемом изображении: " << mainImgKeypoints.size() << "\n";
+	std::cout << "Найдено совпадений (фильтрация по расстоянию): " << matches.size() << "\n";
+	std::cout << "Количество хороших совпадений: " << goodMatches.size() << "\n";
+	std::cout << "Процент совпадения: " << matchPercentage << "%" << "\n";
+
+    cv::drawMatches(
+        templateImg
+        , templateKeypoints
+        , mainImg
+        , mainImgKeypoints
+        , goodMatchesKnn
+        , matchedImageKnn
+        , cv::Scalar::all(-1)
+        , cv::Scalar::all(-1)
+        , std::vector<char>()
+        , cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+
+    cv::imshow("Matched Keypoints ORB (KNN)", matchedImageKnn);
+
+    //double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)templateKeypoints.size() * 100.0;
+    
+    double matchPercentageKnn = (double)goodMatchesKnn.size() / (double)mainImgKeypoints.size() * 100.0;
+
+    std::cout << "Найдено совпадений (фильтрация по KNN): " << knnMatches.size() << "\n";
+    std::cout << "Количество хороших совпадений: " << goodMatchesKnn.size() << "\n";
+    std::cout << "Процент совпадения: " << matchPercentageKnn << "%" << "\n";
+
+	cv::Mat result;
+	cv::matchTemplate(mainImg, templateImg, result, cv::TM_CCOEFF_NORMED);
+
+	double minVal, maxVal;
+	cv::Point minLoc, maxLoc;
+	cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
+
+    std::cout << "Шаблонное совпадение (максимальная корреляция): " << maxVal << "\n";
+
+    // Пороговое значение корреляции
+	if (maxVal > 0.8) 
+	{ 
+		std::cout << "Совпадение подтверждено через шаблонное сравнение." << "\n";
+	}
+	else 
+	{
+        std::cout << "Совпадение не подтверждено.\n";
+	}
+
+    // Размер шаблона
+    cv::Size templateSize = templateImg.size();
+
+    // Рисуем прямоугольник на оригинальном изображении
+    cv::rectangle(
+        mainImg,
+        maxLoc,                                                                     // Верхний левый угол
+        cv::Point(maxLoc.x + templateSize.width, maxLoc.y + templateSize.height),   // Нижний правый угол
+        cv::Scalar(0, 0, 255),                                                      
+        2                                                                           // Толщина линии
+    );
+
+    cv::imshow("Detected Template Area", mainImg);
+
+    std::vector<cv::Point2f> points1, points2;
+
+    for (size_t i = 0; i < goodMatches.size(); i++)
+    {
+        points1.push_back(templateKeypoints[goodMatches[i].queryIdx].pt);
+        points2.push_back(mainImgKeypoints[goodMatches[i].trainIdx].pt);
+    }
+
+    cv::Mat homography = findHomography(points1, points2, cv::RANSAC);
+
+    if (homography.empty())
+    {
+        std::cout << "Гомография не найдена.\n";
+        return -1;
+    }
+
+    // 5. Извлечение угла поворота
+    double angle = atan2(homography.at<double>(1, 0), homography.at<double>(0, 0)) * 180.0 / CV_PI;
+
+    std::cout << "Угол поворота: " << angle << " градусов\n";
+
+    cv::Point2f center(copyMainImg.cols / 2.0F, copyMainImg.rows / 2.0F);
+
+    cv::Mat rotationMatrix = getRotationMatrix2D(center, angle, 1.0);
+
+    // Определяем размер изображения после преобразования
+    cv::Rect2f bbox = cv::RotatedRect(cv::Point2f(), copyMainImg.size(), angle).boundingRect();
+    rotationMatrix.at<double>(0, 2) += bbox.width / 2.0 - center.x;
+    rotationMatrix.at<double>(1, 2) += bbox.height / 2.0 - center.y;
+
+    // Применяем поворот
+    cv::Mat restoredImg;
+    warpAffine(copyMainImg, restoredImg, rotationMatrix, bbox.size());
+    imshow("FINAL rotated image", restoredImg);
+
+	cv::Mat resultRotation;
+	cv::matchTemplate(restoredImg, templateImg, resultRotation, cv::TM_CCOEFF_NORMED);
+
+	double minValRotation, maxValRotation;
+	cv::Point minLocRotation, maxLocRotation;
+	cv::minMaxLoc(resultRotation, &minValRotation, &maxValRotation, &minLocRotation, &maxLocRotation);
+
+	std::cout << "Шаблонное совпадение (максимальная корреляция) после поворота: " << maxValRotation << "\n";
+
+	// Размер шаблона
+	cv::Size templateSizeRotation = templateImg.size();
+
+	// Рисуем прямоугольник на востановленном изображении
+	cv::rectangle(
+		restoredImg,
+		maxLocRotation,																								// Верхний левый угол
+		cv::Point(maxLocRotation.x + templateSizeRotation.width, maxLocRotation.y + templateSizeRotation.height),   // Нижний правый угол
+		cv::Scalar(50, 100, 180),                                                      
+		3																											// Толщина линии
+		);
+
+
+	cv::Mat tempRotationMatrix = getRotationMatrix2D(center, -angle, 1.0);
+	// Определяем размер изображения после преобразования
+	cv::Rect2f bboxTemp = cv::RotatedRect(cv::Point2f(), restoredImg.size(), angle).boundingRect();
+	tempRotationMatrix.at<double>(0, 2) += bboxTemp.width / 2.0 - center.x;
+	tempRotationMatrix.at<double>(1, 2) += bboxTemp.height / 2.0 - center.y;
+
+	warpAffine(restoredImg, restoredImg, tempRotationMatrix, bbox.size());
+
+	cv::imshow("Detected Template Area Rotation (rotated back)", restoredImg);
+
+    cv::waitKey(0);
+
+    return 0;
+}
 
 
 
@@ -981,6 +990,8 @@
 //
 //    return 0;
 //}
+
+
 
 //// ===== Testing scaling =====
 //int main() 
@@ -1265,104 +1276,200 @@
 //    return 0;
 //}
 
-int main()
-{
-    setlocale(LC_ALL, "Russian");
 
-	const char* imgFile = "images/HD-CHIP-SURFACE.jpg";
-	double startTime, endTime;
+//// Blob detection algorythms
+//int main()
+//{
+//    setlocale(LC_ALL, "Russian");
+//
+//	const char* imgFile = "images/HD-CHIP-SURFACE.jpg";
+//	double startTime, endTime;
+//
+//	cv::Mat img = cv::imread(imgFile, cv::IMREAD_GRAYSCALE);
+//
+//	if (img.empty()) 
+//	{
+//		std::cerr << "Ошибка: не удалось загрузить изображение!" << std::endl;
+//		return -1;
+//	}
+//
+//	cv::normalize(img, img, 0, 255, cv::NORM_MINMAX);
+//
+//	// Применение LoG фильтра
+//	cv::Mat LoG;
+//	cv::Laplacian(img, LoG, CV_32F);
+//	cv::GaussianBlur(LoG, LoG, cv::Size(5, 5), 0);
+//
+//	// Применение DoG фильтра
+//	cv::Mat DoG1 = cv::Mat::zeros(img.size(), CV_32F);
+//	cv::Mat DoG2 = cv::Mat::zeros(img.size(), CV_32F);
+//	cv::GaussianBlur(img, DoG1, cv::Size(3, 3), 0);
+//	cv::GaussianBlur(img, DoG2, cv::Size(7, 7), 0);
+//	DoG1 -= DoG2;
+//
+//	cv::GaussianBlur(img, DoG1, cv::Size(5, 5), 0);
+//	cv::GaussianBlur(img, DoG2, cv::Size(11, 11), 0);
+//	DoG2 -= DoG1;
+//
+//	// Применение DoH фильтра
+//	cv::Mat DoH;
+//	cv::GaussianBlur(img, DoH, cv::Size(5, 5), 0);
+//
+//	cv::Mat Dxx, Dyy, Dxy;
+//	cv::Sobel(DoH, Dxx, CV_64F, 2, 0);
+//	cv::Sobel(DoH, Dyy, CV_64F, 0, 2);
+//	cv::Sobel(DoH, Dxy, CV_64F, 1, 1);
+//	DoH = Dxx.mul(Dyy) - Dxy.mul(Dxy);
+//
+//	// Настройка параметров детектора блобов
+//	cv::SimpleBlobDetector::Params params;
+//	params.filterByArea = true;
+//	params.minArea = 10;
+//	params.filterByCircularity = false;
+//	params.filterByConvexity = false;
+//	params.filterByInertia = false;
+//
+//	// Создание детектора блобов
+//	auto detector = cv::SimpleBlobDetector::create(params);
+//
+//	cv::normalize(LoG, LoG, 0, 255, cv::NORM_MINMAX);
+//	LoG.convertTo(LoG, CV_8U);
+//	//cv::adaptiveThreshold(LoG, LoG, 255, cv::ADAPTIVE_THRESH_MEAN_C, cv::THRESH_BINARY, 11, 10);
+//	cv::threshold(LoG, LoG, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+//	cv::imshow("Binary LoG", LoG);
+//
+//	cv::normalize(DoH, DoH, 0, 255, cv::NORM_MINMAX);
+//	DoH.convertTo(DoH, CV_8U);
+//	//cv::threshold(DoH, DoH, 0, 255, cv::THRESH_BINARY | cv::THRESH_OTSU);
+//	cv::imshow("Binary DoH", DoH);
+//
+//	// Обнаружение ключевых точек
+//	std::vector<cv::KeyPoint> keypoints_LoG, keypoints_DoG1, keypoints_DoG2, keypoints_DoH;
+//
+//	startTime = getCPUTime();
+//	detector->detect(LoG, keypoints_LoG);
+//	endTime	= getCPUTime();
+//	std::cout << "Время на LoG (по getCPUTime): " << endTime - startTime << " сек.\n";
+//
+//	startTime = getCPUTime();
+//	detector->detect(DoG1, keypoints_DoG1);
+//	endTime	= getCPUTime();
+//	std::cout << "Время на DoG1 (по getCPUTime): " << endTime - startTime << " сек.\n";
+//
+//	startTime = getCPUTime();
+//	detector->detect(DoG2, keypoints_DoG2);
+//	endTime	= getCPUTime();
+//	std::cout << "Время на DoG2 (по getCPUTime): " << endTime - startTime << " сек.\n";
+//
+//	startTime = getCPUTime();
+//	detector->detect(DoH, keypoints_DoH);
+//	endTime	= getCPUTime();
+//	std::cout << "Время на DoH (по getCPUTime): " << endTime - startTime << " сек.\n";
+//
+//	// Рисование обнаруженных блобов на исходном изображении
+//	cv::Mat img_with_keypoints_LoG, img_with_keypoints_DoG1, img_with_keypoints_DoG2, img_with_keypoints_DoH;
+//	cv::drawKeypoints(img, keypoints_LoG, img_with_keypoints_LoG, cv::Scalar(0, 0, 255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//	cv::drawKeypoints(img, keypoints_DoG1, img_with_keypoints_DoG1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//	cv::drawKeypoints(img, keypoints_DoG2, img_with_keypoints_DoG2, cv::Scalar(255, 0, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//	cv::drawKeypoints(img, keypoints_DoH, img_with_keypoints_DoH, cv::Scalar(0, 255, 255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+//
+//	// Отображение результатов
+//	cv::imshow("LoG", img_with_keypoints_LoG);
+//	cv::imshow("DoG1", img_with_keypoints_DoG1);
+//	cv::imshow("DoG2", img_with_keypoints_DoG2);
+//	cv::imshow("DoH", img_with_keypoints_DoH);
+//
+//	cv::waitKey(0);
+//	cv::destroyAllWindows();
+//
+//	return 0;
+//}
 
-	cv::Mat img = cv::imread(imgFile, cv::IMREAD_GRAYSCALE);
+//// Расстояние между двумя точками на разных кадрах
+//
+//// Функция для перевода пиксельных координат в метрические
+//cv::Point3f pixelToMetric(int x, int y, float distance, float focalLength) 
+//{
+//	float X = static_cast<float>(x) * distance / focalLength;
+//	float Y = static_cast<float>(y) * distance / focalLength;
+//	return cv::Point3f(X, Y, distance);
+//}
+//
+//int main() 
+//{
+//	// Параметры камеры
+//	float focalLength = 800.0f;		// Фокусное расстояние в пикселях
+//	float distanceToObject1 = 0.5f; // Расстояние до объекта на первом кадре (в метрах)
+//	float distanceToObject2 = 0.5f; // Расстояние до объекта на втором кадре (в метрах)
+//
+//	// Координаты точек на первом и втором кадрах (в пикселях)
+//	cv::Point point1(0, 0);		// Точка на первом кадре
+//	cv::Point point2(0, 800);	// Точка на втором кадре
+//
+//	// Перевод пиксельных координат в метрические
+//	cv::Point3f metricPoint1 = pixelToMetric(point1.x, point1.y, distanceToObject1, focalLength);
+//	cv::Point3f metricPoint2 = pixelToMetric(point2.x, point2.y, distanceToObject2, focalLength);
+//
+//	// Вычисление расстояния между точками в пространстве
+//	float deltaX = metricPoint2.x - metricPoint1.x;
+//	float deltaY = metricPoint2.y - metricPoint1.y;
+//	float deltaZ = metricPoint2.z - metricPoint1.z;
+//
+//	float distanceBetweenPoints = std::sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
+//
+//	// Вывод результата
+//	std::cout << "Distance between points: " << distanceBetweenPoints << " meters" << std::endl;
+//
+//	system("pause");
+//
+//	return 0;
+//}
 
-	if (img.empty()) 
-	{
-		std::cerr << "Ошибка: не удалось загрузить изображение!" << std::endl;
-		return -1;
-	}
 
-	cv::normalize(img, img, 0, 255, cv::NORM_MINMAX);
 
-	// Применение LoG фильтра
-	cv::Mat LoG;
-	cv::Laplacian(img, LoG, CV_32F);
-	cv::GaussianBlur(LoG, LoG, cv::Size(5, 5), 0);
-
-	// Применение DoG фильтра
-	cv::Mat DoG1 = cv::Mat::zeros(img.size(), CV_32F);
-	cv::Mat DoG2 = cv::Mat::zeros(img.size(), CV_32F);
-	cv::GaussianBlur(img, DoG1, cv::Size(3, 3), 0);
-	cv::GaussianBlur(img, DoG2, cv::Size(7, 7), 0);
-	DoG1 -= DoG2;
-
-	cv::GaussianBlur(img, DoG1, cv::Size(5, 5), 0);
-	cv::GaussianBlur(img, DoG2, cv::Size(11, 11), 0);
-	DoG2 -= DoG1;
-
-	// Применение DoH фильтра
-	cv::Mat DoH;
-	cv::GaussianBlur(img, DoH, cv::Size(5, 5), 0);
-
-	cv::Mat Dxx, Dyy, Dxy;
-	cv::Sobel(DoH, Dxx, CV_64F, 2, 0);
-	cv::Sobel(DoH, Dyy, CV_64F, 0, 2);
-	cv::Sobel(DoH, Dxy, CV_64F, 1, 1);
-	DoH = Dxx.mul(Dyy) - Dxy.mul(Dxy);
-
-	// Настройка параметров детектора блобов
-	cv::SimpleBlobDetector::Params params;
-	params.filterByArea = true;
-	params.minArea = 10;
-	params.filterByCircularity = false;
-	params.filterByConvexity = false;
-	params.filterByInertia = false;
-
-	// Создание детектора блобов
-	auto detector = cv::SimpleBlobDetector::create(params);
-
-	cv::normalize(LoG, LoG, 0, 255, cv::NORM_MINMAX);
-	LoG.convertTo(LoG, CV_8U);
-
-	cv::normalize(DoH, DoH, 0, 255, cv::NORM_MINMAX);
-	DoH.convertTo(DoH, CV_8U);
-
-	// Обнаружение ключевых точек
-	std::vector<cv::KeyPoint> keypoints_LoG, keypoints_DoG1, keypoints_DoG2, keypoints_DoH;
-
-	startTime = getCPUTime();
-	detector->detect(LoG, keypoints_LoG);
-	endTime	= getCPUTime();
-	std::cout << "Время на LoG (по getCPUTime): " << endTime - startTime << " сек.\n";
-
-	startTime = getCPUTime();
-	detector->detect(DoG1, keypoints_DoG1);
-	endTime	= getCPUTime();
-	std::cout << "Время на DoG1 (по getCPUTime): " << endTime - startTime << " сек.\n";
-
-	startTime = getCPUTime();
-	detector->detect(DoG2, keypoints_DoG2);
-	endTime	= getCPUTime();
-	std::cout << "Время на DoG2 (по getCPUTime): " << endTime - startTime << " сек.\n";
-
-	startTime = getCPUTime();
-	detector->detect(DoH, keypoints_DoH);
-	endTime	= getCPUTime();
-	std::cout << "Время на DoH (по getCPUTime): " << endTime - startTime << " сек.\n";
-
-	// Рисование обнаруженных блобов на исходном изображении
-	cv::Mat img_with_keypoints_LoG, img_with_keypoints_DoG1, img_with_keypoints_DoG2, img_with_keypoints_DoH;
-	cv::drawKeypoints(img, keypoints_LoG, img_with_keypoints_LoG, cv::Scalar(0, 0, 255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::drawKeypoints(img, keypoints_DoG1, img_with_keypoints_DoG1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::drawKeypoints(img, keypoints_DoG2, img_with_keypoints_DoG2, cv::Scalar(255, 0, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::drawKeypoints(img, keypoints_DoH, img_with_keypoints_DoH, cv::Scalar(0, 255, 255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-
-	// Отображение результатов
-	cv::imshow("LoG", img_with_keypoints_LoG);
-	cv::imshow("DoG1", img_with_keypoints_DoG1);
-	cv::imshow("DoG2", img_with_keypoints_DoG2);
-	cv::imshow("DoH", img_with_keypoints_DoH);
-
-	cv::waitKey(0);
-	cv::destroyAllWindows();
-
-	return 0;
-}
+//// ===== Image from camera =====
+//int main()
+//{
+//	std::cout << "Hello, world!\n";
+//
+//	cv::VideoCapture cap(0);
+//
+//	if(!cap.isOpened())			
+//	{
+//		std::cerr << "Failed to open device!\n";
+//		return -1;
+//	}
+//
+//	const char* wndName = "OpenCV Camera";
+//	int width = 1280;
+//	int height = 1024;
+//
+//	cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+//	cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+//
+//	cv::Mat frame;
+//
+//	cv::namedWindow(wndName, cv::WINDOW_AUTOSIZE);
+//
+//	while(true)
+//	{
+//		cap >> frame;		
+//
+//		if (frame.empty()) 
+//		{
+//			std::cerr << "Failed to capture frame!\n";
+//			break;
+//		}
+//
+//		imshow(wndName, frame);
+//
+//		int key = cv::waitKey(1);
+//
+//		if (key >= 0) 
+//		{
+//			break;
+//		}
+//	}
+//
+//	return 0;
+//}

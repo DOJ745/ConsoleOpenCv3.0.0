@@ -139,6 +139,7 @@ public:
 		// Применяем поворот к изображению
 		cv::Mat restoredImg;
 		warpAffine(m_mainImage, restoredImg, rotationMatrix, bbox.size());
+		
 		imshow("FINAL rotated image", restoredImg);
 	}
 };
